@@ -2,6 +2,7 @@ services:
   - type: web
     name: usmef-news-report
     runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    # 배포 시 OCR 모델을 미리 받아 두어 첫 보고서 요청에서 모델 다운로드가 실패하지 않게 합니다.
+    buildCommand: pip install -r requirements.txt && python -c "from rapidocr import ModelType, OCRVersion, RapidOCR; RapidOCR(params={'Rec.lang_type':'korean','Rec.model_type':ModelType.MOBILE,'Rec.ocr_version':OCRVersion.PPOCRV5})"
+    startCommand: gunicorn --timeout 120 app:app
     autoDeployTrigger: commit

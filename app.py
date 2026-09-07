@@ -27,11 +27,15 @@ def index() -> str:
 @app.post("/generate-report")
 def generate_report():
     """최신 소고기 지표를 수집하고 생성한 Excel 파일을 내려줍니다."""
-    market_data = fetch_latest_market_data()
-    created_at = datetime.now().strftime("%Y%m%d_%H%M%S")
-    report_filename = f"usmef_weekly_market_report_{created_at}.xlsx"
-    report_path = OUTPUT_DIR / report_filename
-    write_market_data_to_excel(market_data, report_path)
+    try:
+        market_data = fetch_latest_market_data()
+        created_at = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_filename = f"usmef_weekly_market_report_{created_at}.xlsx"
+        report_path = OUTPUT_DIR / report_filename
+        write_market_data_to_excel(market_data, report_path)
+    except RuntimeError as error:
+        app.logger.exception("USMEF 뉴스라인 보고서 생성 실패")
+        return f"보고서 생성에 실패했습니다: {error}", 502
 
     return send_file(
         report_path,

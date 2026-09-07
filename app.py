@@ -8,7 +8,7 @@ from pathlib import Path
 
 from flask import Flask, redirect, render_template, send_file, url_for
 
-from src.crawler import fetch_latest_market_data
+from src.crawler import fetch_first_page_market_data
 from src.excel_writer import write_market_data_to_excel
 
 
@@ -34,7 +34,7 @@ def generate_report_page():
 def generate_report():
     """최신 소고기 지표를 수집하고 생성한 Excel 파일을 내려줍니다."""
     try:
-        market_data = fetch_latest_market_data()
+        market_data = fetch_first_page_market_data()
         created_at = datetime.now().strftime("%Y%m%d_%H%M%S")
         report_filename = f"usmef_weekly_market_report_{created_at}.xlsx"
         report_path = OUTPUT_DIR / report_filename

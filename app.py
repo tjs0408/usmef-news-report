@@ -6,7 +6,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 
-from flask import Flask, render_template, send_file
+from flask import Flask, redirect, render_template, send_file, url_for
 
 from src.crawler import fetch_latest_market_data
 from src.excel_writer import write_market_data_to_excel
@@ -22,6 +22,12 @@ app = Flask(__name__)
 def index() -> str:
     """보고서 생성 화면을 보여줍니다."""
     return render_template("index.html")
+
+
+@app.get("/generate-report")
+def generate_report_page():
+    """주소창 새로고침으로 POST 주소에 접근한 경우 생성 화면으로 돌려보냅니다."""
+    return redirect(url_for("index"))
 
 
 @app.post("/generate-report")

@@ -114,7 +114,7 @@ def _read_pdf_with_ocr(pdf_bytes: bytes) -> tuple[list[dict[str, Any]], float, f
             image_path.write_bytes(image_bytes)
             result = _get_ocr()(str(image_path))
     except Exception as error:
-        raise RuntimeError("뉴스라인의 숫자를 읽는 OCR 처리에 실패했습니다.") from error
+        raise RuntimeError(f"뉴스라인의 숫자를 읽는 OCR 처리에 실패했습니다. ({error})") from error
 
     if not result.txts or result.boxes is None:
         raise RuntimeError("뉴스라인에서 읽을 수 있는 텍스트를 찾지 못했습니다.")

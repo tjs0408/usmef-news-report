@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="USMEF 최신 뉴스 Excel 보고서 생성 도구">
+  <title>USMEF 뉴스 보고서</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="report-card" aria-labelledby="page-title">
+      <p class="eyebrow">U.S. MEAT EXPORT FEDERATION</p>
+      <h1 id="page-title">USMEF 뉴스 보고서</h1>
+      <p class="description">
+        USMEF 공식 공개 뉴스의 최신 게시물을 수집해 제목, 등록일, 원문 링크가 담긴 Excel 파일로 만듭니다.
+      </p>
+
+      <div class="report-details" aria-label="보고서 구성">
+        <div>
+          <span class="detail-label">데이터 원본</span>
+          <strong>USMEF 공개 뉴스</strong>
+        </div>
+        <div>
+          <span class="detail-label">파일 형식</span>
+          <strong>Excel (.xlsx)</strong>
+        </div>
+        <div>
+          <span class="detail-label">포함 항목</span>
+          <strong>제목 · 등록일 · 링크</strong>
+        </div>
+      </div>
+
+      <form id="report-form" action="{{ url_for('generate_report') }}" method="post">
+        <button id="generate-button" type="submit">
+          <span class="button-label">보고서 생성 및 다운로드</span>
+          <span class="button-loading" aria-hidden="true">뉴스를 수집하고 있습니다…</span>
+        </button>
+      </form>
+      <p id="status-message" class="status-message" aria-live="polite">
+        생성된 파일은 브라우저 다운로드 폴더와 프로젝트의 output 폴더에 저장됩니다.
+      </p>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById("report-form");
+    const button = document.getElementById("generate-button");
+    const status = document.getElementById("status-message");
+
+    form.addEventListener("submit", () => {
+      button.disabled = true;
+      button.classList.add("is-loading");
+      status.textContent = "최신 게시물을 수집해 Excel 파일을 만들고 있습니다.";
+    });
+  </script>
+</body>
+</html>

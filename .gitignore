@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+work/
+
+# Generated reports
+output/*.xlsx
+!output/.gitkeep
+
+# Local environment files
+.env
+.env.*
+
+# Editor settings
+.vscode/
+.idea/

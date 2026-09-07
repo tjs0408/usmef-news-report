@@ -90,13 +90,13 @@ def _read_pdf_with_ocr(pdf_bytes: bytes) -> tuple[list[dict[str, Any]], float, f
     try:
         document = pymupdf.open(stream=pdf_bytes, filetype="pdf")
         page = document[0]
-        # 전체 뉴스라인은 매우 긴 한 페이지 PDF다. 상단의 소고기 시장동향 부분만
-        # 잘라 OCR해야 글자가 축소되지 않고 숫자를 안정적으로 읽을 수 있다.
+        # 전체 뉴스라인은 매우 긴 한 페이지 PDF다. 필요한 소고기 지표 카드(오른쪽
+        # 열)만 잘라 OCR해 작은 Render 인스턴스에서도 메모리 사용량을 낮춘다.
         crop = pymupdf.Rect(
-            0,
-            page.rect.height * 0.13,
+            page.rect.width * 0.55,
+            page.rect.height * 0.20,
             page.rect.width,
-            page.rect.height * 0.36,
+            page.rect.height * 0.30,
         )
         pixmap = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), clip=crop, alpha=False)
         image_bytes = pixmap.tobytes("png")
@@ -131,31 +131,9 @@ def _read_pdf_with_ocr(pdf_bytes: bytes) -> tuple[list[dict[str, Any]], float, f
     return lines, page_width, page_height
 
 
-def _beef_section(lines: list[dict[str, Any]], page_height: float) -> list[dict[str, Any]]:
-    """첫 번째 '미, 소고기 시장동향' 영역만 남겨 돼지고기 수치를 제외합니다."""
-    heading = next(
-        (line for line in lines if "소고기시장동향" in _compact(line["text"])),
-        None,
-    )
-    if heading is None:
-        raise RuntimeError("뉴스라인에서 '미, 소고기 시장동향' 영역을 찾지 못했습니다.")
-
-    pork_heading = next(
-        (
-            line
-            for line in lines
-            if line["top"] > heading["top"]
-            and "돼지고기시장동향" in _compact(line["text"])
-        ),
-        None,
-    )
-    bottom = pork_heading["top"] if pork_heading is not None else page_height
-    return [line for line in lines if heading["top"] <= line["top"] < bottom]
-
-
 def _find_beef_cutout_price(lines: list[dict[str, Any]], page_width: float, page_height: float) -> float:
-    section = _beef_section(lines, page_height)
-    right_column_start = page_width * 0.55
+    section = lines
+    right_column_start = 0
     cutout_label = next(
         (
             line
@@ -185,8 +163,8 @@ def _find_beef_cutout_price(lines: list[dict[str, Any]], page_width: float, page
 
 
 def _find_beef_slaughter_count(lines: list[dict[str, Any]], page_width: float, page_height: float) -> int:
-    section = _beef_section(lines, page_height)
-    right_column_start = page_width * 0.55
+    section = lines
+    right_column_start = 0
     slaughter_label = next(
         (
             line

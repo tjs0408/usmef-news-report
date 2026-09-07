@@ -1,4 +1,4 @@
-"""USMEF 뉴스 Excel 보고서를 생성하는 로컬 웹 애플리케이션입니다."""
+"""USMEF Korea 주간 해외 동향 Excel 보고서를 생성하는 웹 애플리케이션입니다."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from pathlib import Path
 
 from flask import Flask, render_template, send_file
 
-from src.crawler import fetch_latest_news
-from src.excel_writer import write_news_to_excel
+from src.crawler import fetch_latest_market_data
+from src.excel_writer import write_market_data_to_excel
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -26,12 +26,12 @@ def index() -> str:
 
 @app.post("/generate-report")
 def generate_report():
-    """최신 뉴스를 수집하고 생성한 Excel 파일을 내려줍니다."""
-    news_items = fetch_latest_news()
+    """최신 소고기 지표를 수집하고 생성한 Excel 파일을 내려줍니다."""
+    market_data = fetch_latest_market_data()
     created_at = datetime.now().strftime("%Y%m%d_%H%M%S")
-    report_filename = f"usmef_newsline_{created_at}.xlsx"
+    report_filename = f"usmef_weekly_market_report_{created_at}.xlsx"
     report_path = OUTPUT_DIR / report_filename
-    write_news_to_excel(news_items, report_path)
+    write_market_data_to_excel(market_data, report_path)
 
     return send_file(
         report_path,

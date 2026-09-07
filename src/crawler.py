@@ -1,80 +1,237 @@
-"""USMEF 공개 뉴스 API에서 최신 게시물을 가져옵니다."""
+"""USMEF Korea 뉴스라인 PDF에서 소고기 주간 지표를 수집합니다."""
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
+from functools import lru_cache
+from pathlib import Path
+import re
+from tempfile import TemporaryDirectory
 from typing import Any
-from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
-
-API_URL = "https://teamlinq.usmef.org/api/articles"
-SITE_URL = "https://usmef.org"
-REQUEST_TIMEOUT_SECONDS = 30
-USER_AGENT = "USMEF-Newsline-Excel-Crawler/1.0"
+import pymupdf
+from bs4 import BeautifulSoup
+from rapidocr import ModelType, OCRVersion, RapidOCR
 
 
-def fetch_latest_news(max_items: int = 100) -> list[dict[str, str]]:
-    """최신순으로 정렬된 USMEF 공개 뉴스 게시물을 반환합니다.
+NEWSLINE_URL = "https://www.usmef.co.kr/main/newsline.php"
+REQUEST_TIMEOUT_SECONDS = 60
+USER_AGENT = "USMEF-Weekly-Market-Report/1.0 (+https://github.com/tjs0408/usmef-news-report)"
 
-    API가 연도별 목록을 제공하므로, 현재 연도와 전년 데이터를 함께 요청합니다.
-    연초에도 최신 글을 놓치지 않기 위한 처리입니다.
+
+def fetch_latest_market_data() -> dict[str, object]:
+    """최신 MEF NEWSLINE의 소고기 컷아웃·도축두수를 반환합니다.
+
+    USMEF Korea의 뉴스라인은 이미지 기반 PDF로 제공됩니다. 따라서 최신 PDF의
+    첫 페이지를 고해상도로 렌더링한 뒤, 한국어 OCR로 필요한 값만 읽습니다.
     """
-    if max_items < 1:
-        raise ValueError("max_items는 1 이상이어야 합니다.")
-
-    current_year = datetime.now().year
-    raw_items: list[dict[str, Any]] = []
-    for year in (current_year, current_year - 1):
-        raw_items.extend(_fetch_news_for_year(year))
-
-    news_items = [_normalise_item(item) for item in raw_items]
-    news_items = [item for item in news_items if item is not None]
-    news_items.sort(key=lambda item: _parse_date(item["등록일"]), reverse=True)
-    return news_items[:max_items]
-
-
-def _fetch_news_for_year(year: int) -> list[dict[str, Any]]:
-    """특정 연도의 뉴스 데이터를 API에서 가져옵니다."""
-    request = Request(
-        # USMEF API는 일반적인 ``?year=YYYY`` 대신
-        # ``/articles&year=YYYY`` 형식을 사용합니다.
-        f"{API_URL}&year={year}",
-        headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
-    )
-
-    try:
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-            payload = json.load(response)
-    except (OSError, json.JSONDecodeError) as error:
-        raise RuntimeError("USMEF 서버가 JSON 형식의 뉴스 목록을 반환하지 않았습니다.") from error
-
-    if not payload.get("success") or not isinstance(payload.get("data"), list):
-        raise RuntimeError("USMEF 뉴스 목록을 가져오지 못했습니다.")
-    return payload["data"]
-
-
-def _normalise_item(item: dict[str, Any]) -> dict[str, str] | None:
-    """API 응답을 Excel에 쓸 세 개의 열로 정리합니다."""
-    title = str(item.get("headline", "")).strip()
-    published_at = str(item.get("datePublished", "")).strip()
-    relative_link = str(item.get("hrefSlug", "")).strip()
-    if not title or not published_at or not relative_link:
-        return None
+    pdf_url = _find_latest_pdf_url(_download_text(NEWSLINE_URL))
+    report_date = _date_from_pdf_url(pdf_url)
+    ocr_lines, page_width, page_height = _read_pdf_with_ocr(_download_bytes(pdf_url))
 
     return {
-        "제목": title,
-        "등록일": _parse_date(published_at).strftime("%Y-%m-%d"),
-        "링크": urljoin(SITE_URL, relative_link),
+        "구분": report_date.date(),
+        "도축두수": _find_beef_slaughter_count(ocr_lines, page_width, page_height),
+        "미국($/lb)": _find_beef_cutout_price(ocr_lines, page_width, page_height),
     }
 
 
-def _parse_date(value: str) -> datetime:
-    """USMEF API의 영문 날짜를 datetime으로 변환합니다."""
-    for date_format in ("%B %d, %Y", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(value, date_format)
-        except ValueError:
-            continue
-    raise RuntimeError(f"등록일 형식을 해석할 수 없습니다: {value}")
+def _download_text(url: str) -> str:
+    return _download_bytes(url).decode("utf-8", errors="replace")
+
+
+def _download_bytes(url: str) -> bytes:
+    request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "*/*"})
+    try:
+        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            return response.read()
+    except OSError as error:
+        raise RuntimeError("USMEF 서버에서 뉴스라인 파일을 가져오지 못했습니다.") from error
+
+
+def _find_latest_pdf_url(html: str) -> str:
+    """뉴스라인 목록의 맨 위 게시물에서 PDF 링크를 가져옵니다."""
+    soup = BeautifulSoup(html, "html.parser")
+    first_link = soup.select_one("a.board_content")
+    if first_link is None:
+        raise RuntimeError("USMEF 뉴스라인의 최신 게시물을 찾지 못했습니다.")
+
+    onclick = first_link.get("href", "")
+    match = re.search(r"sampleOpenWin\('([^']+\.pdf)'", onclick, flags=re.IGNORECASE)
+    if match is None:
+        raise RuntimeError("최신 게시물의 PDF 주소를 읽지 못했습니다.")
+    return match.group(1)
+
+
+def _date_from_pdf_url(pdf_url: str) -> datetime:
+    """뉴스라인 PDF 경로의 YYYYMMDD 발행일을 날짜로 변환합니다."""
+    match = re.search(r"/(\d{8})/[^/]+\.pdf$", pdf_url)
+    if match is None:
+        raise RuntimeError("뉴스라인 PDF 주소에서 발행일을 읽지 못했습니다.")
+    return datetime.strptime(match.group(1), "%Y%m%d")
+
+
+@lru_cache(maxsize=1)
+def _get_ocr() -> RapidOCR:
+    """한국어와 숫자를 인식하는 경량 OCR 엔진을 한 번만 준비합니다."""
+    return RapidOCR(
+        params={
+            "Rec.lang_type": "korean",
+            "Rec.model_type": ModelType.MOBILE,
+            "Rec.ocr_version": OCRVersion.PPOCRV5,
+        }
+    )
+
+
+def _read_pdf_with_ocr(pdf_bytes: bytes) -> tuple[list[dict[str, Any]], float, float]:
+    """PDF 첫 페이지에서 OCR 문장과 좌표를 추출합니다."""
+    document = None
+    try:
+        document = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+        page = document[0]
+        # 전체 뉴스라인은 매우 긴 한 페이지 PDF다. 상단의 소고기 시장동향 부분만
+        # 잘라 OCR해야 글자가 축소되지 않고 숫자를 안정적으로 읽을 수 있다.
+        crop = pymupdf.Rect(
+            0,
+            page.rect.height * 0.13,
+            page.rect.width,
+            page.rect.height * 0.36,
+        )
+        pixmap = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), clip=crop, alpha=False)
+        image_bytes = pixmap.tobytes("png")
+        page_width, page_height = float(pixmap.width), float(pixmap.height)
+    except Exception as error:
+        raise RuntimeError("뉴스라인 PDF를 읽을 수 없습니다.") from error
+    finally:
+        if document is not None:
+            document.close()
+
+    try:
+        # RapidOCR는 파일 경로로 전달할 때 대형 PNG의 문자 검출 정확도가 가장 안정적이다.
+        with TemporaryDirectory() as temporary_directory:
+            image_path = Path(temporary_directory) / "newsline.png"
+            image_path.write_bytes(image_bytes)
+            result = _get_ocr()(str(image_path))
+    except Exception as error:
+        raise RuntimeError("뉴스라인의 숫자를 읽는 OCR 처리에 실패했습니다.") from error
+
+    if not result.txts or result.boxes is None:
+        raise RuntimeError("뉴스라인에서 읽을 수 있는 텍스트를 찾지 못했습니다.")
+
+    lines: list[dict[str, Any]] = []
+    for text, box in zip(result.txts, result.boxes, strict=True):
+        lines.append(
+            {
+                "text": text,
+                "left": float(min(point[0] for point in box)),
+                "top": float(min(point[1] for point in box)),
+            }
+        )
+    return lines, page_width, page_height
+
+
+def _beef_section(lines: list[dict[str, Any]], page_height: float) -> list[dict[str, Any]]:
+    """첫 번째 '미, 소고기 시장동향' 영역만 남겨 돼지고기 수치를 제외합니다."""
+    heading = next(
+        (line for line in lines if "소고기시장동향" in _compact(line["text"])),
+        None,
+    )
+    if heading is None:
+        raise RuntimeError("뉴스라인에서 '미, 소고기 시장동향' 영역을 찾지 못했습니다.")
+
+    pork_heading = next(
+        (
+            line
+            for line in lines
+            if line["top"] > heading["top"]
+            and "돼지고기시장동향" in _compact(line["text"])
+        ),
+        None,
+    )
+    bottom = pork_heading["top"] if pork_heading is not None else page_height
+    return [line for line in lines if heading["top"] <= line["top"] < bottom]
+
+
+def _find_beef_cutout_price(lines: list[dict[str, Any]], page_width: float, page_height: float) -> float:
+    section = _beef_section(lines, page_height)
+    right_column_start = page_width * 0.55
+    cutout_label = next(
+        (
+            line
+            for line in section
+            if line["left"] >= right_column_start and "컷아웃" in _compact(line["text"])
+        ),
+        None,
+    )
+    if cutout_label is None:
+        raise RuntimeError("소고기 컷아웃 항목을 찾지 못했습니다.")
+
+    price_pattern = re.compile(r"\$\s*(\d+(?:\.\d+)?)")
+    candidates = sorted(
+        (
+            line
+            for line in section
+            if line["left"] >= right_column_start
+            and cutout_label["top"] - 80 <= line["top"] <= cutout_label["top"] + 550
+        ),
+        key=lambda line: line["top"],
+    )
+    for line in candidates:
+        match = price_pattern.search(line["text"])
+        if match:
+            return float(match.group(1))
+    raise RuntimeError("소고기 컷아웃 가격을 읽지 못했습니다.")
+
+
+def _find_beef_slaughter_count(lines: list[dict[str, Any]], page_width: float, page_height: float) -> int:
+    section = _beef_section(lines, page_height)
+    right_column_start = page_width * 0.55
+    slaughter_label = next(
+        (
+            line
+            for line in section
+            if line["left"] >= right_column_start and "도축두수" in _compact(line["text"])
+        ),
+        None,
+    )
+    if slaughter_label is None:
+        raise RuntimeError("소고기 도축두수 항목을 찾지 못했습니다.")
+
+    candidates = sorted(
+        (
+            line
+            for line in section
+            if line["left"] >= right_column_start
+            and slaughter_label["top"] <= line["top"] <= slaughter_label["top"] + 650
+            and "전주" not in _compact(line["text"])
+        ),
+        key=lambda line: line["top"],
+    )
+    for line in candidates:
+        count = _korean_head_to_thousands(line["text"])
+        if count is not None:
+            return count
+    raise RuntimeError("소고기 도축두수를 읽지 못했습니다.")
+
+
+def _korean_head_to_thousands(value: str) -> int | None:
+    """'54만 2,000두' 같은 표기를 천두 단위 정수로 변환합니다."""
+    compact = re.sub(r"\s+", "", value)
+    match = re.search(r"(\d+)만(?:(\d{1,3}(?:,\d{3})?)|(?:(\d+)천))?두", compact)
+    if match is None:
+        # OCR가 '54만 2,000두'의 한글 단위를 놓쳐 '542,000'처럼 읽는 경우다.
+        plain_number = re.search(r"(?<![\d,])(\d{2,3}(?:,\d{3})+)(?![\d,])", compact)
+        if plain_number is None:
+            return None
+        return int(plain_number.group(1).replace(",", "")) // 1_000
+
+    ten_thousands = int(match.group(1))
+    tail = match.group(2)
+    thousands = int(match.group(3)) if match.group(3) else 0
+    remainder = int(tail.replace(",", "")) if tail else thousands * 1000
+    return (ten_thousands * 10_000 + remainder) // 1_000
+
+
+def _compact(value: str) -> str:
+    return re.sub(r"\s+", "", value)

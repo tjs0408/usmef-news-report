@@ -1,19 +1,19 @@
-"""USMEF 최신 뉴스 목록을 Excel 파일로 저장하는 실행 파일입니다."""
+"""USMEF Korea 최신 뉴스라인의 소고기 지표를 Excel로 저장합니다."""
 
 from pathlib import Path
 
-from src.crawler import fetch_latest_news
-from src.excel_writer import write_news_to_excel
+from src.crawler import fetch_latest_market_data
+from src.excel_writer import write_market_data_to_excel
 
 
 def main() -> None:
     project_root = Path(__file__).resolve().parent
-    output_path = project_root / "output" / "usmef_newsline.xlsx"
+    output_path = project_root / "output" / "usmef_weekly_market_report.xlsx"
 
-    news_items = fetch_latest_news()
-    write_news_to_excel(news_items, output_path)
+    market_data = fetch_latest_market_data()
+    write_market_data_to_excel(market_data, output_path)
 
-    print(f"{len(news_items)}개의 게시물을 저장했습니다.")
+    print("최신 뉴스라인의 소고기 지표를 저장했습니다.")
     print(f"파일 위치: {output_path}")
 
 

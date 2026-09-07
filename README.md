@@ -1,8 +1,12 @@
-# USMEF 뉴스 Excel 수집기
+# 주간 해외 동향 리포트
 
-USMEF(U.S. Meat Export Federation)의 공개 최신 뉴스 게시물을 수집해 Excel 파일로 저장하는 Python 프로그램입니다.
+USMEF Korea 뉴스라인의 최신 PDF에서 미국 소고기 시장 데이터를 읽어 Excel 파일로 저장하는 Python 프로그램입니다.
 
-실행하면 `제목`, `등록일`, `링크` 열이 포함된 `output/usmef_newsline.xlsx` 파일을 만듭니다.
+생성되는 Excel의 열은 아래와 같습니다.
+
+- `구분`: 최신 뉴스라인의 발행일
+- `도축두수`: 미국 소고기 주간 도축두수(천두 단위)
+- `미국($/lb)`: Choice 등급 소고기 컷아웃 가격(달러/파운드)
 
 ## 준비물
 
@@ -20,50 +24,41 @@ pip install -r requirements.txt
 python main.py
 ```
 
-실행이 완료되면 다음 파일을 Excel로 열어 확인할 수 있습니다.
+실행이 끝나면 다음 파일이 생성됩니다.
 
 ```text
-output/usmef_newsline.xlsx
+output/usmef_weekly_market_report.xlsx
 ```
 
-## 생성되는 Excel 파일
-
-`USMEF 뉴스` 시트에 최신순으로 최대 100개 게시물이 저장됩니다.
-
-- 제목
-- 등록일 (`YYYY-MM-DD`)
-- 링크 (클릭 가능한 원문 링크)
-
-## 프로젝트 구조
-
-```text
-.
-├── main.py
-├── requirements.txt
-├── README.md
-├── src
-│   ├── crawler.py
-│   └── excel_writer.py
-└── output
-```
-
-## 참고 사항
-
-USMEF의 `Export Newsline` 아카이브는 현재 웹사이트에서 회원 전용으로 표시됩니다. 그래서 이 1단계 프로그램은 로그인 없이 이용할 수 있는 USMEF 공식 공개 뉴스 API를 사용합니다. 향후 회원 인증 정보를 사용할 수 있게 되면 `src/crawler.py`의 데이터 원본을 Export Newsline API로 교체할 수 있습니다.
-
-USMEF 웹사이트나 API의 응답 형식이 변경되면 수집 코드도 조정해야 할 수 있습니다.
+뉴스라인 PDF는 이미지 형식이므로 프로그램은 한국어 OCR로 필요한 숫자를 읽습니다. 처음 실행할 때는 OCR 모델을 내려받기 때문에 평소보다 조금 더 걸릴 수 있습니다.
 
 ## 웹페이지로 실행하기
-
-웹페이지에서 버튼을 눌러 보고서를 만들려면 아래 명령을 실행하세요.
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 python app.py
 ```
 
-브라우저에서 `http://127.0.0.1:5000`을 열고 **보고서 생성 및 다운로드** 버튼을 누르면 됩니다. 웹페이지에서 생성한 파일은 기존 파일을 덮어쓰지 않도록 시간별 이름으로 `output` 폴더에 저장됩니다.
+브라우저에서 `http://127.0.0.1:5000`을 열고 **보고서 생성 및 다운로드** 버튼을 누르세요. 생성한 파일은 브라우저 다운로드 폴더와 프로젝트의 `output` 폴더에 저장됩니다.
 
-## 외부 공개 배포
+## 프로젝트 구조
 
-이 프로젝트에는 Render 배포 설정(`render.yaml`, `Procfile`)이 포함되어 있습니다. GitHub 저장소에 올린 뒤 Render에서 해당 저장소를 연결하면 공개 웹 주소를 만들 수 있습니다. 공개 배포 시에는 Render 환경이 지정하는 `PORT`를 자동으로 사용합니다.
+```text
+.
+├── app.py
+├── main.py
+├── requirements.txt
+├── README.md
+├── src
+│   ├── crawler.py
+│   └── excel_writer.py
+├── templates
+│   └── index.html
+└── output
+```
+
+## 참고 사항
+
+- 원본: [USMEF Korea 뉴스라인](https://www.usmef.co.kr/main/newsline.php)
+- 원본 뉴스라인의 PDF 디자인이나 표기 방식이 크게 바뀌면 OCR 추출 규칙을 조정해야 할 수 있습니다.
+- Render 배포는 `render.yaml`과 `Procfile`을 사용합니다. GitHub에 반영하면 Render가 자동으로 새 버전을 배포합니다.

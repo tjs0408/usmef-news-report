@@ -50,14 +50,27 @@ if (mode === "pending") {
   process.stdout.write(JSON.stringify(pending));
 } else if (mode === "fill") {
   const [templatePath, outputPath, pendingPath, marketDataPath] = arguments_;
-  const [pending, marketData] = await Promise.all([
+  const [pending, sourceData] = await Promise.all([
     fs.readFile(pendingPath, "utf8").then(JSON.parse),
     fs.readFile(marketDataPath, "utf8").then(JSON.parse),
   ]);
-  const dataByDate = new Map(marketData.map((item) => [item.reportDate, item]));
+  const dataByDate = new Map(sourceData.marketData.map((item) => [item.reportDate, item]));
+  const euGermanyByDate = new Map(sourceData.euGermanyPrices.map((item) => [item.weekEnded, item.germanyPrice]));
   const workbook = await loadTemplate(templatePath);
 
   for (const item of pending) {
+    if (item.market === "eu_pork_germany") {
+      const germanyPrice = euGermanyByDate.get(item.weekEnded);
+      if (typeof germanyPrice !== "number") continue;
+      const sheet = workbook.worksheets.getItem(item.sheetName);
+      sheet.getRange(`${item.currentColumn}${item.row}`).values = [[germanyPrice]];
+      sheet.getRange(`${item.kgPriceColumn}${item.row}`).formulas = [[`=ROUND(${item.currentColumn}${item.row}/100,2)`]];
+      sheet.getRange(`${item.wonPriceColumn}${item.row}`).formulas = [[`=${item.currentColumn}${item.row}*${item.exchangeColumn}${item.row}`]];
+      sheet.getRange(`${item.wonKgPriceColumn}${item.row}`).formulas = [[`=${item.wonPriceColumn}${item.row}/100`]];
+      sheet.getRange(`${item.kgPriceColumn}${item.row}`).format.numberFormat = "0.00";
+      sheet.getRange(`${item.wonPriceColumn}${item.row}:${item.wonKgPriceColumn}${item.row}`).format.numberFormat = "#,##0";
+      continue;
+    }
     const data = dataByDate.get(item.reportDate);
     if (!data) continue;
     const sheet = workbook.worksheets.getItem(item.sheetName);

@@ -24,6 +24,16 @@ MARKET_SHEETS = (
     {"sheetName": "소-미국", "dateColumn": "EO", "currentColumn": "EQ", "revisionColumn": "ER", "priceColumn": "ES", "kgPriceColumn": "ET", "exchangeColumn": "EU", "wonPriceColumn": "EV", "market": "beef"},
     {"sheetName": "돼지-미국", "dateColumn": "FD", "currentColumn": "FF", "revisionColumn": "FG", "priceColumn": "FH", "kgPriceColumn": "FI", "exchangeColumn": "FJ", "wonPriceColumn": "FK", "market": "pork"},
 )
+EU_GERMANY_SHEET = {
+    "sheetName": "돼지-EU(독일)",
+    "dateColumn": "LH",
+    "currentColumn": "LJ",
+    "kgPriceColumn": "LK",
+    "exchangeColumn": "LL",
+    "wonPriceColumn": "LM",
+    "wonKgPriceColumn": "LN",
+    "market": "eu_pork_germany",
+}
 
 
 def find_pending_report_dates(template_path: Path, today: date) -> list[dict[str, object]]:
@@ -52,36 +62,70 @@ def find_pending_report_dates(template_path: Path, today: date) -> list[dict[str
     return pending
 
 
+def find_pending_eu_germany_rows(template_path: Path, today: date) -> list[dict[str, object]]:
+    """돼지-EU(독일) 양식에서 아직 입력되지 않은 과거 주차를 찾습니다."""
+    with ZipFile(template_path, "r") as archive:
+        sheet_paths = _find_sheet_paths(archive)
+        cell_values = _read_sheet_cell_values(archive, sheet_paths[EU_GERMANY_SHEET["sheetName"]])
+    pending: list[dict[str, object]] = []
+    for row in range(8, 60):
+        week_ended_serial = cell_values.get(f"{EU_GERMANY_SHEET['dateColumn']}{row}")
+        germany_price = cell_values.get(f"{EU_GERMANY_SHEET['currentColumn']}{row}")
+        euro_exchange_rate = cell_values.get(f"{EU_GERMANY_SHEET['exchangeColumn']}{row}")
+        if week_ended_serial is None or (germany_price is not None and euro_exchange_rate is not None):
+            continue
+        week_ended = _excel_serial_to_date(week_ended_serial)
+        if week_ended <= today:
+            pending.append(
+                {
+                    **EU_GERMANY_SHEET,
+                    "row": row,
+                    "weekEnded": week_ended.isoformat(),
+                    "euroExchangeDate": week_ended.isoformat(),
+                }
+            )
+    return pending
+
+
 def write_market_data_to_template(
     template_path: Path,
     output_path: Path,
     pending_rows: Sequence[Mapping[str, object]],
     market_data: Sequence[Mapping[str, object]],
     exchange_rates: Mapping[date, float],
+    eu_germany_rows: Sequence[Mapping[str, object]] = (),
+    eu_germany_prices: Mapping[date, float] | None = None,
+    eur_exchange_rates: Mapping[date, float] | None = None,
 ) -> None:
     """수집값·환율을 입력하고, 다음 주 뉴스로 이전 주 도축두수를 정정합니다."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pending_path = output_path.with_suffix(".pending.json")
     market_data_path = output_path.with_suffix(".market-data.json")
-    serialized_data = [
-        {
-            "reportDate": item["구분"].isoformat(),
-            "slaughterCount": item["도축두수"],
-            "previousSlaughterCount": item["usda 수정"],
-            "cutoutPrice": item["미국($/lb)"],
-            "porkSlaughterCount": item["돼지 도축두수"],
-            "porkPreviousSlaughterCount": item["돼지 usda 수정"],
-            "porkCutoutPrice": item["돼지 미국($/lb)"],
-        }
-        for item in market_data
-    ]
+    serialized_data = {
+        "marketData": [
+            {
+                "reportDate": item["구분"].isoformat(),
+                "slaughterCount": item["도축두수"],
+                "previousSlaughterCount": item["usda 수정"],
+                "cutoutPrice": item["미국($/lb)"],
+                "porkSlaughterCount": item["돼지 도축두수"],
+                "porkPreviousSlaughterCount": item["돼지 usda 수정"],
+                "porkCutoutPrice": item["돼지 미국($/lb)"],
+            }
+            for item in market_data
+        ],
+        "euGermanyPrices": [
+            {"weekEnded": item.isoformat(), "germanyPrice": price}
+            for item, price in (eu_germany_prices or {}).items()
+        ],
+    }
     serialized_pending_rows = [
         {
             **item,
             "exchangeRate": exchange_rates[date.fromisoformat(str(item["exchangeDate"]))],
         }
         for item in pending_rows
-    ]
+    ] + list(eu_germany_rows)
     try:
         pending_path.write_text(json.dumps(serialized_pending_rows), encoding="utf-8")
         market_data_path.write_text(json.dumps(serialized_data), encoding="utf-8")
@@ -92,7 +136,12 @@ def write_market_data_to_template(
             str(pending_path),
             str(market_data_path),
         )
-        _set_opening_view(output_path, pending_rows, exchange_rates)
+        _set_opening_view(
+            output_path,
+            [*pending_rows, *eu_germany_rows],
+            exchange_rates,
+            eur_exchange_rates or {},
+        )
     finally:
         pending_path.unlink(missing_ok=True)
         market_data_path.unlink(missing_ok=True)
@@ -154,6 +203,7 @@ def _set_opening_view(
     output_path: Path,
     pending_rows: Sequence[Mapping[str, object]],
     exchange_rates: Mapping[date, float],
+    eur_exchange_rates: Mapping[date, float],
 ) -> None:
     """환율·원화 환산값과, 각 시트의 마지막 현행화 위치를 설정합니다."""
     namespace = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -205,6 +255,18 @@ def _set_opening_view(
         sheet_path = relationship_target.lstrip("/") if relationship_target.startswith("/") else f"xl/{relationship_target}"
         worksheet = ElementTree.fromstring(contents[sheet_path])
         for item in pending_for_sheet:
+            if item.get("market") == "eu_pork_germany":
+                exchange_date = date.fromisoformat(str(item["euroExchangeDate"]))
+                euro_exchange_rate = eur_exchange_rates[exchange_date]
+                row = int(item["row"])
+                germany_price = _worksheet_number(worksheet, f"{item['currentColumn']}{row}")
+                _set_worksheet_number(worksheet, f"{item['exchangeColumn']}{row}", euro_exchange_rate)
+                if germany_price is not None:
+                    _set_worksheet_number(worksheet, f"{item['wonPriceColumn']}{row}", germany_price * euro_exchange_rate)
+                    _set_worksheet_number(worksheet, f"{item['wonKgPriceColumn']}{row}", germany_price * euro_exchange_rate / 100)
+                continue
+            if "exchangeDate" not in item:
+                continue
             exchange_date = date.fromisoformat(str(item["exchangeDate"]))
             exchange_rate = exchange_rates[exchange_date]
             row = int(item["row"])
@@ -218,11 +280,9 @@ def _set_opening_view(
             sheet_views = worksheet.find(f"{{{namespace}}}sheetViews")
             if sheet_views is None:
                 sheet_views = ElementTree.Element(f"{{{namespace}}}sheetViews")
-            else:
-                worksheet.remove(sheet_views)
-            sheet_format = worksheet.find(f"{{{namespace}}}sheetFormatPr")
-            sheet_view_index = list(worksheet).index(sheet_format) if sheet_format is not None else 0
-            worksheet.insert(sheet_view_index, sheet_views)
+                sheet_format = worksheet.find(f"{{{namespace}}}sheetFormatPr")
+                sheet_view_index = list(worksheet).index(sheet_format) if sheet_format is not None else 0
+                worksheet.insert(sheet_view_index, sheet_views)
             sheet_view = sheet_views.find(f"{{{namespace}}}sheetView")
             if sheet_view is None:
                 sheet_view = ElementTree.SubElement(sheet_views, f"{{{namespace}}}sheetView")

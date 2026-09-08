@@ -11,8 +11,17 @@ from uuid import uuid4
 
 from flask import Flask, jsonify, redirect, render_template, request, send_file, url_for
 
-from src.crawler import fetch_market_data_for_report_dates, fetch_usd_krw_exchange_rates
-from src.template_report import find_pending_report_dates, write_market_data_to_template
+from src.crawler import (
+    fetch_ahdb_germany_pig_prices,
+    fetch_eur_krw_exchange_rates,
+    fetch_market_data_for_report_dates,
+    fetch_usd_krw_exchange_rates,
+)
+from src.template_report import (
+    find_pending_eu_germany_rows,
+    find_pending_report_dates,
+    write_market_data_to_template,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -88,11 +97,16 @@ def download_report(job_id: str):
 def _run_report_job(job_id: str, template_path: Path) -> None:
     """뉴스 수집과 Excel 생성을 실행하고 단계별 진행률을 기록합니다."""
     try:
-        pending_rows = find_pending_report_dates(template_path, date.today())
-        if not pending_rows:
+        market_pending_rows = find_pending_report_dates(template_path, date.today())
+        eu_germany_rows = find_pending_eu_germany_rows(template_path, date.today())
+        if not market_pending_rows and not eu_germany_rows:
             raise RuntimeError("현재 양식에서 현행화할 주차가 없습니다.")
-        report_dates = {date.fromisoformat(str(row["reportDate"])) for row in pending_rows}
-        _update_job(job_id, progress=15, message=f"현행화할 뉴스 {len(report_dates)}건을 찾았습니다.")
+        report_dates = {date.fromisoformat(str(row["reportDate"])) for row in market_pending_rows}
+        _update_job(
+            job_id,
+            progress=15,
+            message=f"USMEF 뉴스 {len(report_dates)}건, AHDB 독일 가격 대상 {len(eu_germany_rows)}건을 찾았습니다.",
+        )
 
         def update_ocr_progress(index: int, total: int, report_date: date, stage: str) -> None:
             completed_count = index - 1 if stage == "started" else index
@@ -108,15 +122,29 @@ def _run_report_job(job_id: str, template_path: Path) -> None:
                 message=message,
             )
 
-        market_data = fetch_market_data_for_report_dates(report_dates, update_ocr_progress)
-        _update_job(job_id, progress=72, message="날짜별 USD/KRW 매매기준율을 확인하고 있습니다.")
-        exchange_dates = {date.fromisoformat(str(row["exchangeDate"])) for row in pending_rows}
+        market_data = fetch_market_data_for_report_dates(report_dates, update_ocr_progress) if report_dates else []
+        _update_job(job_id, progress=72, message="AHDB 독일 돼지고기 가격을 확인하고 있습니다.")
+        eu_germany_dates = {date.fromisoformat(str(row["weekEnded"])) for row in eu_germany_rows}
+        eu_germany_prices = fetch_ahdb_germany_pig_prices(eu_germany_dates)
+        _update_job(job_id, progress=74, message="날짜별 USD/KRW·EUR/KRW 매매기준율을 확인하고 있습니다.")
+        exchange_dates = {date.fromisoformat(str(row["exchangeDate"])) for row in market_pending_rows}
         exchange_rates = fetch_usd_krw_exchange_rates(exchange_dates)
-        _update_job(job_id, progress=75, message="수집한 값과 환율을 엑셀 양식에 입력하고 있습니다.")
+        euro_exchange_dates = {date.fromisoformat(str(row["euroExchangeDate"])) for row in eu_germany_rows}
+        eur_exchange_rates = fetch_eur_krw_exchange_rates(euro_exchange_dates)
+        _update_job(job_id, progress=76, message="수집한 값과 환율을 엑셀 양식에 입력하고 있습니다.")
         created_at = datetime.now().strftime("%Y%m%d_%H%M%S")
         report_filename = f"해외시장_수급_및_가격_동향_{created_at}.xlsx"
         report_path = OUTPUT_DIR / report_filename
-        write_market_data_to_template(template_path, report_path, pending_rows, market_data, exchange_rates)
+        write_market_data_to_template(
+            template_path,
+            report_path,
+            market_pending_rows,
+            market_data,
+            exchange_rates,
+            eu_germany_rows,
+            eu_germany_prices,
+            eur_exchange_rates,
+        )
         _update_job(
             job_id,
             status="completed",

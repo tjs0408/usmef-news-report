@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from io import BytesIO
 from functools import lru_cache
 import json
 from pathlib import Path
@@ -14,11 +15,17 @@ from urllib.request import Request, urlopen
 
 import pymupdf
 from bs4 import BeautifulSoup
+from openpyxl import load_workbook
 from rapidocr import ModelType, OCRVersion, RapidOCR
 
 
 NEWSLINE_URL = "https://www.usmef.co.kr/main/newsline.php"
-EXCHANGE_RATE_API_URL = "https://stock.naver.com/api/stockSecurity/exchange-rates/v2/USD/daily"
+EXCHANGE_RATE_API_URL = "https://stock.naver.com/api/stockSecurity/exchange-rates/v2/{currency_code}/daily"
+AHDB_EU_PIG_PRICES_URL = (
+    "https://projectblue.blob.core.windows.net/media/Default/Market%20Intelligence/"
+    "pork/Prices/Deadweight%20pig%20prices/EU%20DW%20pg%20prices/"
+    "EU%20deadweight%20pig%20prices.xlsx"
+)
 REQUEST_TIMEOUT_SECONDS = 60
 USER_AGENT = "USMEF-Weekly-Market-Report/1.0 (+https://github.com/tjs0408/usmef-news-report)"
 
@@ -56,29 +63,49 @@ def fetch_market_data_for_report_dates(
 
 def fetch_usd_krw_exchange_rates(exchange_dates: set[date]) -> dict[date, float]:
     """네이버 증권의 날짜별 USD/KRW 매매기준율을 반환합니다."""
+    return _fetch_naver_exchange_rates(exchange_dates, "USD")
+
+
+def fetch_eur_krw_exchange_rates(exchange_dates: set[date]) -> dict[date, float]:
+    """네이버 증권의 EUR/KRW 매매기준율을 반환합니다.
+
+    돼지-EU 양식의 기준일은 일요일이므로, 휴장일에는 직전 영업일 값을 사용합니다.
+    """
+    return _fetch_naver_exchange_rates(exchange_dates, "EUR", use_previous_business_day=True)
+
+
+def _fetch_naver_exchange_rates(
+    exchange_dates: set[date],
+    currency_code: str,
+    use_previous_business_day: bool = False,
+) -> dict[date, float]:
+    """네이버 증권 하나은행 매매기준율을 지정 통화·날짜로 반환합니다."""
     if not exchange_dates:
         return {}
 
     rates: dict[date, float] = {}
+    available_rates: dict[date, float] = {}
     cursor: str | None = None
     oldest_requested_date = min(exchange_dates)
     while True:
         parameters: dict[str, str] = {"bankType": "hana", "size": "20"}
         if cursor:
             parameters["cursor"] = cursor
-        response = _download_exchange_rate_bytes(f"{EXCHANGE_RATE_API_URL}?{urlencode(parameters)}")
+        url = EXCHANGE_RATE_API_URL.format(currency_code=currency_code)
+        response = _download_exchange_rate_bytes(f"{url}?{urlencode(parameters)}", currency_code)
         try:
             payload = json.loads(response.decode("utf-8"))
             items = payload["items"]
         except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as error:
-            raise RuntimeError("네이버 증권에서 환율 데이터를 읽지 못했습니다.") from error
+            raise RuntimeError(f"네이버 증권에서 {currency_code}/KRW 환율 데이터를 읽지 못했습니다.") from error
 
         page_dates: list[date] = []
         for item in items:
             item_date = date.fromisoformat(str(item["date"]))
             page_dates.append(item_date)
+            available_rates[item_date] = float(str(item["saleBaseRate"]).replace(",", ""))
             if item_date in exchange_dates:
-                rates[item_date] = float(str(item["saleBaseRate"]).replace(",", ""))
+                rates[item_date] = available_rates[item_date]
 
         if exchange_dates.issubset(rates) or not payload.get("hasNext"):
             break
@@ -88,11 +115,46 @@ def fetch_usd_krw_exchange_rates(exchange_dates: set[date]) -> dict[date, float]
         if not cursor:
             break
 
+    if use_previous_business_day:
+        for target_date in exchange_dates - set(rates):
+            prior_dates = [item_date for item_date in available_rates if item_date <= target_date]
+            if prior_dates:
+                rates[target_date] = available_rates[max(prior_dates)]
+
     missing_dates = sorted(exchange_dates - set(rates))
     if missing_dates:
         missing_text = ", ".join(item.isoformat() for item in missing_dates)
-        raise RuntimeError(f"네이버 증권에서 해당 날짜의 USD/KRW 매매기준율을 찾지 못했습니다: {missing_text}")
+        raise RuntimeError(f"네이버 증권에서 해당 날짜의 {currency_code}/KRW 매매기준율을 찾지 못했습니다: {missing_text}")
     return rates
+
+
+def fetch_ahdb_germany_pig_prices(target_dates: set[date]) -> dict[date, float]:
+    """AHDB의 주간 Grade E 독일 돼지고기 가격(€/100kg)을 날짜별로 반환합니다."""
+    if not target_dates:
+        return {}
+    try:
+        workbook = load_workbook(
+            BytesIO(_download_ahdb_bytes(AHDB_EU_PIG_PRICES_URL)),
+            read_only=True,
+            data_only=True,
+        )
+        worksheet = workbook["E grade euro"]
+    except (KeyError, OSError, ValueError) as error:
+        raise RuntimeError("AHDB의 EU 돼지고기 가격 파일을 읽지 못했습니다.") from error
+
+    try:
+        header_row, week_ended_column, germany_column = _find_ahdb_germany_columns(worksheet)
+        prices: dict[date, float] = {}
+        for values in worksheet.iter_rows(min_row=header_row + 1, values_only=True):
+            week_ended = values[week_ended_column]
+            germany_price = values[germany_column]
+            if isinstance(week_ended, datetime):
+                week_ended = week_ended.date()
+            if week_ended in target_dates and isinstance(germany_price, (int, float)):
+                prices[week_ended] = float(germany_price)
+    finally:
+        workbook.close()
+    return prices
 
 
 def _fetch_market_data_from_entries(
@@ -150,20 +212,38 @@ def _download_bytes(url: str) -> bytes:
         raise RuntimeError("USMEF 서버에서 뉴스라인 파일을 가져오지 못했습니다.") from error
 
 
-def _download_exchange_rate_bytes(url: str) -> bytes:
+def _download_exchange_rate_bytes(url: str, currency_code: str) -> bytes:
     """네이버 증권 환율 API를 브라우저 요청 형식으로 읽습니다."""
     request = Request(
         url,
         headers={
             "User-Agent": "Mozilla/5.0",
-            "Referer": "https://stock.naver.com/marketindex/exchange/FX_USDKRW/price",
+            "Referer": f"https://stock.naver.com/marketindex/exchange/FX_{currency_code}KRW/price",
         },
     )
     try:
         with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
             return response.read()
     except OSError as error:
-        raise RuntimeError("네이버 증권에서 USD/KRW 환율 데이터를 가져오지 못했습니다.") from error
+        raise RuntimeError(f"네이버 증권에서 {currency_code}/KRW 환율 데이터를 가져오지 못했습니다.") from error
+
+
+def _download_ahdb_bytes(url: str) -> bytes:
+    request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})
+    try:
+        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            return response.read()
+    except OSError as error:
+        raise RuntimeError("AHDB에서 EU 돼지고기 가격 파일을 가져오지 못했습니다.") from error
+
+
+def _find_ahdb_germany_columns(worksheet: Any) -> tuple[int, int, int]:
+    """AHDB 원본의 주차·독일 열 위치를 헤더명으로 찾습니다."""
+    for row_number, values in enumerate(worksheet.iter_rows(min_row=1, max_row=30, values_only=True), start=1):
+        normalized = [str(value).strip() if value is not None else "" for value in values]
+        if "Week ended" in normalized and "Germany" in normalized:
+            return row_number, normalized.index("Week ended"), normalized.index("Germany")
+    raise RuntimeError("AHDB 파일에서 Week ended 또는 Germany 열을 찾지 못했습니다.")
 
 
 def _find_first_page_pdf_entries(html: str) -> list[tuple[datetime, str]]:

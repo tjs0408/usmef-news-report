@@ -77,6 +77,9 @@ def _extract_market_data(pdf_url: str, report_date: datetime) -> dict[str, objec
         "도축두수": _find_beef_slaughter_count(ocr_lines, page_width, page_height),
         "usda 수정": _find_beef_previous_slaughter_count(ocr_lines, page_width, page_height),
         "미국($/lb)": _find_beef_cutout_price(ocr_lines, page_width, page_height),
+        "돼지 도축두수": _find_pork_slaughter_count(ocr_lines, page_width, page_height),
+        "돼지 usda 수정": _find_pork_previous_slaughter_count(ocr_lines, page_width, page_height),
+        "돼지 미국($/lb)": _find_pork_cutout_price(ocr_lines, page_width, page_height),
     }
 
 
@@ -151,12 +154,12 @@ def _read_pdf_with_ocr(pdf_bytes: bytes) -> tuple[list[dict[str, Any]], float, f
         # 컷아웃/도축두수 카드는 소고기, 그 뒤 카드는 돼지고기다.
         segment_ratio = 0.12
         with TemporaryDirectory() as temporary_directory:
-            for segment_index, start_ratio in enumerate((0.0, 0.12, 0.24, 0.36)):
+            for segment_index, start_ratio in enumerate((0.0, 0.12, 0.24, 0.36, 0.48)):
                 crop = pymupdf.Rect(
                     page.rect.width * 0.55,
                     page.rect.height * start_ratio,
                     page.rect.width,
-                    page.rect.height * min(start_ratio + segment_ratio, 0.48),
+                    page.rect.height * min(start_ratio + segment_ratio, 0.60),
                 )
                 pixmap = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), clip=crop, alpha=False)
                 image_path = Path(temporary_directory) / f"newsline_{segment_index}.png"
@@ -185,28 +188,48 @@ def _read_pdf_with_ocr(pdf_bytes: bytes) -> tuple[list[dict[str, Any]], float, f
 
 
 def _find_beef_cutout_price(lines: list[dict[str, Any]], page_width: float, page_height: float) -> float:
-    section = lines
-    right_column_start = 0
-    cutout_label = next((line for line in sorted(section, key=lambda line: line["top"])
-                         if line["left"] >= right_column_start and "컷아웃" in _compact(line["text"])), None)
-    if cutout_label is None:
-        raise RuntimeError("소고기 컷아웃 항목을 찾지 못했습니다.")
+    return _find_cutout_price(lines, occurrence=0, market_name="소고기")
 
-    price_pattern = re.compile(r"\$\s*(\d+(?:\.\d+)?)")
+
+def _find_pork_cutout_price(lines: list[dict[str, Any]], page_width: float, page_height: float) -> float:
+    return _find_cutout_price(lines, occurrence=1, market_name="돼지고기")
+
+
+def _find_cutout_price(lines: list[dict[str, Any]], occurrence: int, market_name: str) -> float:
+    cutout_label = (
+        _find_pork_label(lines, "컷아웃", f"{market_name} 컷아웃")
+        if market_name == "돼지고기"
+        else _find_label(lines, "컷아웃", occurrence, f"{market_name} 컷아웃")
+    )
     candidates = sorted(
-        (
-            line
-            for line in section
-            if line["left"] >= right_column_start
-            and cutout_label["top"] - 80 <= line["top"] <= cutout_label["top"] + 750
-        ),
+        (line for line in lines if cutout_label["top"] - 80 <= line["top"] <= cutout_label["top"] + 750),
         key=lambda line: line["top"],
     )
+    if market_name == "돼지고기":
+        # 돼지고기 카드에서는 '$'와 현재 가격을 서로 다른 상자로 읽는 경우가 많다.
+        for line in candidates:
+            if not (cutout_label["left"] - 30 <= line["left"] <= cutout_label["left"] + 350):
+                continue
+            match = re.fullmatch(r"\s*([01]\.\d{2})\s*", line["text"])
+            if match:
+                return float(match.group(1))
+
+    price_pattern = re.compile(r"\$\s*(\d+(?:\.\d+)?)")
     for line in candidates:
+        if not (cutout_label["left"] - 40 <= line["left"] <= cutout_label["left"] + 350):
+            continue
         match = price_pattern.search(line["text"])
+        if match and "전주" not in _compact(line["text"]):
+            return float(match.group(1))
+
+    # OCR가 '$'와 숫자를 서로 다른 상자로 읽는 경우의 마지막 보완 경로다.
+    for line in candidates:
+        if not (cutout_label["left"] - 30 <= line["left"] <= cutout_label["left"] + 350):
+            continue
+        match = re.fullmatch(r"\s*([01]\.\d{2})\s*", line["text"])
         if match:
             return float(match.group(1))
-    raise RuntimeError("소고기 컷아웃 가격을 읽지 못했습니다.")
+    raise RuntimeError(f"{market_name} 컷아웃 가격을 읽지 못했습니다.")
 
 
 def _find_beef_slaughter_count(lines: list[dict[str, Any]], page_width: float, page_height: float) -> int:
@@ -251,14 +274,70 @@ def _find_beef_previous_slaughter_count(lines: list[dict[str, Any]], page_width:
     raise RuntimeError("소고기 전 주 도축두수를 읽지 못했습니다.")
 
 
+def _find_pork_slaughter_count(lines: list[dict[str, Any]], page_width: float, page_height: float) -> int:
+    return _find_slaughter_count(lines, occurrence=1, previous_week=False, market_name="돼지고기")
+
+
+def _find_pork_previous_slaughter_count(lines: list[dict[str, Any]], page_width: float, page_height: float) -> int:
+    return _find_slaughter_count(lines, occurrence=1, previous_week=True, market_name="돼지고기")
+
+
+def _find_slaughter_count(lines: list[dict[str, Any]], occurrence: int, previous_week: bool, market_name: str) -> int:
+    slaughter_label = (
+        _find_pork_label(lines, "도축두수", f"{market_name} 도축두수")
+        if market_name == "돼지고기"
+        else _find_label(lines, "도축두수", occurrence, f"{market_name} 도축두수")
+    )
+    candidates = sorted(
+        (
+            line
+            for line in lines
+            if slaughter_label["top"] <= line["top"] <= slaughter_label["top"] + 450
+            and ("전주" in _compact(line["text"])) == previous_week
+        ),
+        key=lambda line: line["top"],
+    )
+    for line in candidates:
+        count = _korean_head_to_thousands(line["text"])
+        if count is not None:
+            return count
+        count = _loose_korean_head_to_thousands(line["text"])
+        if count is not None:
+            return count
+    week_label = "전 주 " if previous_week else ""
+    raise RuntimeError(f"{market_name} {week_label}도축두수를 읽지 못했습니다.")
+
+
 def _find_beef_slaughter_label(lines: list[dict[str, Any]]) -> dict[str, Any]:
-    slaughter_label = next(
-        (line for line in sorted(lines, key=lambda line: line["top"]) if "도축두수" in _compact(line["text"])),
+    return _find_label(lines, "도축두수", occurrence=0, label_name="소고기 도축두수")
+
+
+def _find_label(lines: list[dict[str, Any]], term: str, occurrence: int, label_name: str) -> dict[str, Any]:
+    labels = [line for line in sorted(lines, key=lambda line: line["top"]) if term in _compact(line["text"])]
+    if len(labels) <= occurrence:
+        raise RuntimeError(f"{label_name} 항목을 찾지 못했습니다.")
+    return labels[occurrence]
+
+
+def _find_pork_label(lines: list[dict[str, Any]], term: str, label_name: str) -> dict[str, Any]:
+    """'U.S. pork market trends' 제목 바로 아래의 지표 레이블을 찾습니다."""
+    pork_heading = next(
+        (line for line in sorted(lines, key=lambda line: line["top"]) if "porkmarket" in _compact(line["text"]).lower()),
         None,
     )
-    if slaughter_label is None:
-        raise RuntimeError("소고기 도축두수 항목을 찾지 못했습니다.")
-    return slaughter_label
+    if pork_heading is None:
+        raise RuntimeError("돼지고기 시장동향 카드를 찾지 못했습니다.")
+    label = next(
+        (
+            line
+            for line in sorted(lines, key=lambda line: line["top"])
+            if line["top"] >= pork_heading["top"] and term in _compact(line["text"])
+        ),
+        None,
+    )
+    if label is None:
+        raise RuntimeError(f"{label_name} 항목을 찾지 못했습니다.")
+    return label
 
 
 def _korean_head_to_thousands(value: str) -> int | None:
@@ -277,6 +356,15 @@ def _korean_head_to_thousands(value: str) -> int | None:
     thousands = int(match.group(3)) if match.group(3) else 0
     remainder = int(tail.replace(",", "")) if tail else thousands * 1000
     return (ten_thousands * 10_000 + remainder) // 1_000
+
+
+def _loose_korean_head_to_thousands(value: str) -> int | None:
+    """OCR가 '두' 단위를 누락한 '237만7,000' 표기를 보완합니다."""
+    compact = re.sub(r"\s+", "", value)
+    match = re.search(r"(\d{2,3})만(\d{1,3}(?:,\d{3})?)", compact)
+    if match is None:
+        return None
+    return (int(match.group(1)) * 10_000 + int(match.group(2).replace(",", ""))) // 1_000
 
 
 def _compact(value: str) -> str:

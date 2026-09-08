@@ -20,21 +20,28 @@ async function loadTemplate(templatePath) {
   return SpreadsheetFile.importXlsx(input);
 }
 
+const marketSheets = [
+  { sheetName: "소-미국", dateColumn: "EO", currentColumn: "EQ", outputColumns: "EQ:ES", market: "beef" },
+  { sheetName: "돼지-미국", dateColumn: "FD", currentColumn: "FF", outputColumns: "FF:FH", market: "pork" },
+];
+
 if (mode === "pending") {
   const [templatePath, today] = arguments_;
   const workbook = await loadTemplate(templatePath);
-  const sheet = workbook.worksheets.getItem("소-미국");
   const pending = [];
-  const rows = sheet.getRange("EO8:EQ60").values;
 
-  for (const [index, values] of rows.entries()) {
-    const row = index + 8;
-    const [fridaySerial, , currentSlaughter] = values;
-    if (typeof fridaySerial !== "number" || currentSlaughter !== null) continue;
+  for (const config of marketSheets) {
+    const sheet = workbook.worksheets.getItem(config.sheetName);
+    const rows = sheet.getRange(`${config.dateColumn}8:${config.currentColumn}60`).values;
+    for (const [index, values] of rows.entries()) {
+      const row = index + 8;
+      const [fridaySerial, , currentSlaughter] = values;
+      if (typeof fridaySerial !== "number" || currentSlaughter !== null) continue;
 
-    const friday = excelSerialToIsoDate(fridaySerial);
-    const reportDate = addDays(friday, 5);
-    if (reportDate <= today) pending.push({ row, reportDate });
+      const friday = excelSerialToIsoDate(fridaySerial);
+      const reportDate = addDays(friday, 5);
+      if (reportDate <= today) pending.push({ ...config, row, reportDate });
+    }
   }
   process.stdout.write(JSON.stringify(pending));
 } else if (mode === "fill") {
@@ -45,16 +52,20 @@ if (mode === "pending") {
   ]);
   const dataByDate = new Map(marketData.map((item) => [item.reportDate, item]));
   const workbook = await loadTemplate(templatePath);
-  const sheet = workbook.worksheets.getItem("소-미국");
 
   for (const item of pending) {
     const data = dataByDate.get(item.reportDate);
     if (!data) continue;
-    const previousWeekSlaughterCount = sheet.getRange(`EQ${item.row - 1}`).values[0][0];
-    sheet.getRange(`EQ${item.row}:ES${item.row}`).values = [[
-      data.slaughterCount,
-      data.previousSlaughterCount === previousWeekSlaughterCount ? null : data.previousSlaughterCount,
-      data.cutoutPrice,
+    const sheet = workbook.worksheets.getItem(item.sheetName);
+    const isPork = item.market === "pork";
+    const previousWeekSlaughterCount = sheet.getRange(`${item.currentColumn}${item.row - 1}`).values[0][0];
+    const values = isPork
+      ? [data.porkSlaughterCount, data.porkPreviousSlaughterCount, data.porkCutoutPrice]
+      : [data.slaughterCount, data.previousSlaughterCount, data.cutoutPrice];
+    sheet.getRange(`${item.outputColumns.split(":")[0]}${item.row}:${item.outputColumns.split(":")[1]}${item.row}`).values = [[
+      values[0],
+      values[1] === previousWeekSlaughterCount ? null : values[1],
+      values[2],
     ]];
   }
 

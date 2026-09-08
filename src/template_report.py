@@ -38,6 +38,9 @@ def write_market_data_to_template(
             "slaughterCount": item["도축두수"],
             "previousSlaughterCount": item["usda 수정"],
             "cutoutPrice": item["미국($/lb)"],
+            "porkSlaughterCount": item["돼지 도축두수"],
+            "porkPreviousSlaughterCount": item["돼지 usda 수정"],
+            "porkCutoutPrice": item["돼지 미국($/lb)"],
         }
         for item in market_data
     ]

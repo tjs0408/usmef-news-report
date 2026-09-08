@@ -31,7 +31,7 @@
         </div>
       </div>
 
-      <form id="report-form" action="{{ url_for('generate_report') }}" method="post" enctype="multipart/form-data">
+      <form id="report-form" action="{{ url_for('start_report') }}" method="post" enctype="multipart/form-data">
         <label class="upload-field" for="template-file">
           <span class="detail-label">기준 Excel 파일</span>
           <input id="template-file" name="template_file" type="file" accept=".xlsx" required>
@@ -41,6 +41,16 @@
           <span class="button-loading" aria-hidden="true">뉴스라인을 분석하고 있습니다…</span>
         </button>
       </form>
+      <section id="progress-panel" class="progress-panel" hidden aria-live="polite">
+        <div class="progress-heading">
+          <strong id="progress-message">보고서 생성 준비 중</strong>
+          <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div id="progress-bar" class="progress-bar"></div>
+        </div>
+        <p id="elapsed-time" class="elapsed-time">경과 시간 0초</p>
+      </section>
       <p id="status-message" class="status-message" aria-live="polite">
         마지막으로 받은 보고서를 업로드하면, 이미 채워진 주차는 건너뛰고 새 주차만 반영합니다.
       </p>
@@ -51,38 +61,63 @@
     const form = document.getElementById("report-form");
     const button = document.getElementById("generate-button");
     const status = document.getElementById("status-message");
+    const progressPanel = document.getElementById("progress-panel");
+    const progressMessage = document.getElementById("progress-message");
+    const progressPercent = document.getElementById("progress-percent");
+    const progressTrack = document.querySelector(".progress-track");
+    const progressBar = document.getElementById("progress-bar");
+    const elapsedTime = document.getElementById("elapsed-time");
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       button.disabled = true;
       button.classList.add("is-loading");
-      status.textContent = "양식의 비어 있는 주차 행을 현행화하고 있습니다.";
+      progressPanel.hidden = false;
+      status.textContent = "서버에서 보고서 생성을 시작하고 있습니다.";
+      const startedAt = Date.now();
+      const elapsedTimer = window.setInterval(() => {
+        const seconds = Math.floor((Date.now() - startedAt) / 1000);
+        elapsedTime.textContent = `경과 시간 ${seconds}초`;
+      }, 1000);
 
       try {
         const response = await fetch(form.action, { method: "POST", body: new FormData(form) });
         if (!response.ok) {
-          throw new Error(await response.text());
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.error || "보고서 생성 작업을 시작하지 못했습니다.");
         }
-
-        const file = await response.blob();
-        const downloadUrl = URL.createObjectURL(file);
-        const downloadLink = document.createElement("a");
-        const filename = response.headers.get("Content-Disposition")
-          ?.match(/filename=([^;]+)/)?.[1]?.replaceAll('"', "") || "주간_해외_동향_리포트.xlsx";
-        downloadLink.href = downloadUrl;
-        downloadLink.download = filename;
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        downloadLink.remove();
-        URL.revokeObjectURL(downloadUrl);
-        status.textContent = "다운로드가 완료되었습니다. 다음 보고서를 생성할 수 있습니다.";
+        const { jobId } = await response.json();
+        await waitForReport(jobId);
       } catch (error) {
         status.textContent = `보고서 생성에 실패했습니다: ${error.message}`;
       } finally {
+        window.clearInterval(elapsedTimer);
         button.disabled = false;
         button.classList.remove("is-loading");
       }
     });
+
+    async function waitForReport(jobId) {
+      while (true) {
+        const response = await fetch(`/report-status/${jobId}`);
+        const job = await response.json();
+        if (!response.ok) throw new Error(job.error || "진행 상태를 불러오지 못했습니다.");
+
+        const progress = Number(job.progress || 0);
+        progressMessage.textContent = job.message;
+        progressPercent.textContent = `${progress}%`;
+        progressBar.style.width = `${progress}%`;
+        progressTrack.setAttribute("aria-valuenow", String(progress));
+
+        if (job.status === "completed") {
+          window.location.assign(`/download-report/${jobId}`);
+          status.textContent = "다운로드를 시작했습니다. 다음 보고서를 생성할 수 있습니다.";
+          return;
+        }
+        if (job.status === "failed") throw new Error(job.message);
+        await new Promise((resolve) => window.setTimeout(resolve, 1200));
+      }
+    }
   </script>
 </body>
 </html>

@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 import re
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, Callable
 from urllib.request import Request, urlopen
 
 import pymupdf
@@ -30,7 +30,10 @@ def fetch_first_page_market_data() -> list[dict[str, object]]:
     return _fetch_market_data_from_entries(entries)
 
 
-def fetch_market_data_for_report_dates(report_dates: set[date]) -> list[dict[str, object]]:
+def fetch_market_data_for_report_dates(
+    report_dates: set[date],
+    progress_callback: Callable[[int, int, date], None] | None = None,
+) -> list[dict[str, object]]:
     """지정한 발행일의 뉴스라인 PDF에서 소고기 지표를 수집합니다.
 
     엑셀의 금요일 주차 행은 다음 주 수요일에 발행된 뉴스라인과 연결됩니다.
@@ -45,14 +48,19 @@ def fetch_market_data_for_report_dates(report_dates: set[date]) -> list[dict[str
     if missing_dates:
         missing_text = ", ".join(report_date.isoformat() for report_date in missing_dates)
         raise RuntimeError(f"뉴스라인 1페이지에서 요청한 발행일을 찾지 못했습니다: {missing_text}")
-    return _fetch_market_data_from_entries(entries)
+    return _fetch_market_data_from_entries(entries, progress_callback)
 
 
-def _fetch_market_data_from_entries(entries: list[tuple[datetime, str]]) -> list[dict[str, object]]:
+def _fetch_market_data_from_entries(
+    entries: list[tuple[datetime, str]],
+    progress_callback: Callable[[int, int, date], None] | None = None,
+) -> list[dict[str, object]]:
     market_data: list[dict[str, object]] = []
     failures: list[str] = []
 
-    for report_date, pdf_url in entries:
+    for index, (report_date, pdf_url) in enumerate(entries, start=1):
+        if progress_callback is not None:
+            progress_callback(index, len(entries), report_date.date())
         try:
             market_data.append(_extract_market_data(pdf_url, report_date))
         except RuntimeError as error:

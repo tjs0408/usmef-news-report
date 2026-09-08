@@ -62,6 +62,17 @@ if (mode === "pending") {
       ? [data.porkSlaughterCount, data.porkPreviousSlaughterCount, data.porkCutoutPrice]
       : [data.slaughterCount, data.previousSlaughterCount, data.cutoutPrice];
 
+    if (!isPork) {
+      const previousWeekSlaughterCount = sheet.getRange(`${item.currentColumn}${item.row - 1}`).values[0][0];
+      sheet.getRange(`${item.currentColumn}${item.row}:${item.priceColumn}${item.row}`).values = [[
+        slaughterCount,
+        previousSlaughterCount === previousWeekSlaughterCount ? null : previousSlaughterCount,
+        cutoutPrice,
+      ]];
+      sheet.getRange(`${item.kgPriceColumn}${item.row}`).formulas = [[`=${item.priceColumn}${item.row}*2.20462`]];
+      continue;
+    }
+
     sheet.getRange(`${item.currentColumn}${item.row}:${item.priceColumn}${item.row}`).values = [[
       slaughterCount,
       null,

@@ -8,6 +8,7 @@ report_template/*.xlsx
 
 # Generated reports
 output/*.xlsx
+output/*.inspect.ndjson
 !output/.gitkeep
 
 # Local environment files

@@ -50,9 +50,10 @@ if (mode === "pending") {
   for (const item of pending) {
     const data = dataByDate.get(item.reportDate);
     if (!data) continue;
+    const previousWeekSlaughterCount = sheet.getRange(`EQ${item.row - 1}`).values[0][0];
     sheet.getRange(`EQ${item.row}:ES${item.row}`).values = [[
       data.slaughterCount,
-      data.previousSlaughterCount === data.slaughterCount ? null : data.previousSlaughterCount,
+      data.previousSlaughterCount === previousWeekSlaughterCount ? null : data.previousSlaughterCount,
       data.cutoutPrice,
     ]];
   }

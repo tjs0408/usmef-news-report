@@ -119,7 +119,11 @@ def _set_opening_view(output_path: Path) -> None:
     sheet_views = worksheet.find(f"{{{namespace}}}sheetViews")
     if sheet_views is None:
         sheet_views = ElementTree.Element(f"{{{namespace}}}sheetViews")
-        worksheet.insert(1, sheet_views)
+    else:
+        worksheet.remove(sheet_views)
+    sheet_format = worksheet.find(f"{{{namespace}}}sheetFormatPr")
+    sheet_view_index = list(worksheet).index(sheet_format) if sheet_format is not None else 0
+    worksheet.insert(sheet_view_index, sheet_views)
     sheet_view = sheet_views.find(f"{{{namespace}}}sheetView")
     if sheet_view is None:
         sheet_view = ElementTree.SubElement(sheet_views, f"{{{namespace}}}sheetView")

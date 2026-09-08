@@ -9,6 +9,8 @@ report_template/*.xlsx
 # Generated reports
 output/*.xlsx
 output/*.inspect.ndjson
+output/*.pending.json
+output/*.market-data.json
 !output/.gitkeep
 
 # Local environment files

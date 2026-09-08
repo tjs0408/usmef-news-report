@@ -48,10 +48,36 @@
     const button = document.getElementById("generate-button");
     const status = document.getElementById("status-message");
 
-    form.addEventListener("submit", () => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
       button.disabled = true;
       button.classList.add("is-loading");
       status.textContent = "양식의 비어 있는 주차 행을 현행화하고 있습니다.";
+
+      try {
+        const response = await fetch(form.action, { method: "POST" });
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+
+        const file = await response.blob();
+        const downloadUrl = URL.createObjectURL(file);
+        const downloadLink = document.createElement("a");
+        const filename = response.headers.get("Content-Disposition")
+          ?.match(/filename=([^;]+)/)?.[1]?.replaceAll('"', "") || "주간_해외_동향_리포트.xlsx";
+        downloadLink.href = downloadUrl;
+        downloadLink.download = filename;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        downloadLink.remove();
+        URL.revokeObjectURL(downloadUrl);
+        status.textContent = "다운로드가 완료되었습니다. 다음 보고서를 생성할 수 있습니다.";
+      } catch (error) {
+        status.textContent = `보고서 생성에 실패했습니다: ${error.message}`;
+      } finally {
+        button.disabled = false;
+        button.classList.remove("is-loading");
+      }
     });
   </script>
 </body>

@@ -13,13 +13,13 @@
       <p class="eyebrow">U.S. MEAT EXPORT FEDERATION</p>
       <h1 id="page-title">주간 해외 동향 리포트</h1>
       <p class="description">
-        엑셀 양식의 빈 주차 행에 USMEF Korea 뉴스라인의 미국 소·돼지 도축두수와 컷아웃 가격을 채웁니다.
+        업로드한 엑셀의 빈 주차 행에 USMEF Korea 뉴스라인의 미국 소·돼지 도축두수와 컷아웃 가격을 채웁니다.
       </p>
 
       <div class="report-details" aria-label="보고서 구성">
         <div>
           <span class="detail-label">데이터 원본</span>
-          <strong>USMEF Korea 뉴스라인 · 기존 엑셀 양식</strong>
+          <strong>USMEF Korea 뉴스라인 · 업로드한 엑셀 양식</strong>
         </div>
         <div>
           <span class="detail-label">파일 형식</span>
@@ -31,14 +31,18 @@
         </div>
       </div>
 
-      <form id="report-form" action="{{ url_for('generate_report') }}" method="post">
+      <form id="report-form" action="{{ url_for('generate_report') }}" method="post" enctype="multipart/form-data">
+        <label class="upload-field" for="template-file">
+          <span class="detail-label">기준 Excel 파일</span>
+          <input id="template-file" name="template_file" type="file" accept=".xlsx" required>
+        </label>
         <button id="generate-button" type="submit">
           <span class="button-label">보고서 생성 및 다운로드</span>
           <span class="button-loading" aria-hidden="true">뉴스라인을 분석하고 있습니다…</span>
         </button>
       </form>
       <p id="status-message" class="status-message" aria-live="polite">
-        금요일 주차 행에는 다음 주 수요일 뉴스 데이터를 반영합니다.
+        마지막으로 받은 보고서를 업로드하면, 이미 채워진 주차는 건너뛰고 새 주차만 반영합니다.
       </p>
     </section>
   </main>
@@ -55,7 +59,7 @@
       status.textContent = "양식의 비어 있는 주차 행을 현행화하고 있습니다.";
 
       try {
-        const response = await fetch(form.action, { method: "POST" });
+        const response = await fetch(form.action, { method: "POST", body: new FormData(form) });
         if (!response.ok) {
           throw new Error(await response.text());
         }

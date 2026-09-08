@@ -120,6 +120,23 @@ button:disabled {
   opacity: 0.76;
 }
 
+.upload-field {
+  display: block;
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid #cbdcdf;
+  border-radius: 0.6rem;
+  background: #f7fbfc;
+}
+
+.upload-field input {
+  display: block;
+  width: 100%;
+  color: #173c49;
+  font: inherit;
+  font-size: 0.9rem;
+}
+
 .button-loading {
   display: none;
 }

@@ -21,8 +21,8 @@ async function loadTemplate(templatePath) {
 }
 
 const marketSheets = [
-  { sheetName: "소-미국", dateColumn: "EO", currentColumn: "EQ", outputColumns: "EQ:ES", market: "beef" },
-  { sheetName: "돼지-미국", dateColumn: "FD", currentColumn: "FF", outputColumns: "FF:FH", market: "pork" },
+  { sheetName: "소-미국", dateColumn: "EO", currentColumn: "EQ", outputColumns: "EQ:ES", priceColumn: "ES", kgPriceColumn: "ET", market: "beef" },
+  { sheetName: "돼지-미국", dateColumn: "FD", currentColumn: "FF", outputColumns: "FF:FH", priceColumn: "FH", kgPriceColumn: "FI", market: "pork" },
 ];
 
 if (mode === "pending") {
@@ -67,6 +67,7 @@ if (mode === "pending") {
       values[1] === previousWeekSlaughterCount ? null : values[1],
       values[2],
     ]];
+    sheet.getRange(`${item.kgPriceColumn}${item.row}`).formulas = [[`=${item.priceColumn}${item.row}*2.20462`]];
   }
 
   workbook.recalculate();

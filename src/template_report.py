@@ -138,6 +138,7 @@ def write_market_data_to_template(
         )
         _set_opening_view(
             output_path,
+            template_path,
             [*pending_rows, *eu_germany_rows],
             exchange_rates,
             eur_exchange_rates or {},
@@ -201,6 +202,7 @@ def _excel_serial_to_date(value: str) -> date:
 
 def _set_opening_view(
     output_path: Path,
+    template_path: Path,
     pending_rows: Sequence[Mapping[str, object]],
     exchange_rates: Mapping[date, float],
     eur_exchange_rates: Mapping[date, float],
@@ -216,6 +218,13 @@ def _set_opening_view(
         contents = {info.filename: source.read(info.filename) for info in source.infolist()}
         info_by_name = {info.filename: info for info in source.infolist()}
 
+    with ZipFile(template_path, "r") as template_archive:
+        template_sheet_paths = _find_sheet_paths(template_archive)
+        template_worksheet = ElementTree.fromstring(
+            template_archive.read(template_sheet_paths[EU_GERMANY_SHEET["sheetName"]])
+        )
+        template_eu_sheet_views = template_worksheet.find(f"{{{namespace}}}sheetViews")
+
     workbook = ElementTree.fromstring(contents["xl/workbook.xml"])
     sheets = workbook.findall(f"{{{namespace}}}sheets/{{{namespace}}}sheet")
     relationships = ElementTree.fromstring(contents["xl/_rels/workbook.xml.rels"])
@@ -225,6 +234,10 @@ def _set_opening_view(
     }
     focus_by_sheet: dict[str, tuple[str, str]] = {}
     for item in pending_rows:
+        # 이 시트는 B8 고정 창과 넓은 연도별 영역을 함께 사용한다. topLeftCell을
+        # 최신 열로 강제하면 Excel의 분할 창이 흔들릴 수 있어 원래 화면을 보존한다.
+        if item.get("market") == "eu_pork_germany":
+            continue
         sheet_name = str(item["sheetName"])
         row = int(item["row"])
         date_column = str(item["dateColumn"])
@@ -232,18 +245,18 @@ def _set_opening_view(
         if previous_focus is None or row > int(previous_focus[1][len(date_column) :]):
             focus_by_sheet[sheet_name] = (f"{date_column}{max(8, row - 1)}", f"{date_column}{row}")
 
-    active_sheet_name = "소-미국" if "소-미국" in focus_by_sheet else next(iter(focus_by_sheet))
-    target_sheet_index = next(index for index, sheet in enumerate(sheets) if sheet.get("name") == active_sheet_name)
-
-    book_views = workbook.find(f"{{{namespace}}}bookViews")
-    if book_views is None:
-        book_views = ElementTree.Element(f"{{{namespace}}}bookViews")
-        workbook.insert(0, book_views)
-    workbook_view = book_views.find(f"{{{namespace}}}workbookView")
-    if workbook_view is None:
-        workbook_view = ElementTree.SubElement(book_views, f"{{{namespace}}}workbookView")
-    workbook_view.set("activeTab", str(target_sheet_index))
-    contents["xl/workbook.xml"] = ElementTree.tostring(workbook, encoding="utf-8", xml_declaration=True)
+    if focus_by_sheet:
+        active_sheet_name = "소-미국" if "소-미국" in focus_by_sheet else next(iter(focus_by_sheet))
+        target_sheet_index = next(index for index, sheet in enumerate(sheets) if sheet.get("name") == active_sheet_name)
+        book_views = workbook.find(f"{{{namespace}}}bookViews")
+        if book_views is None:
+            book_views = ElementTree.Element(f"{{{namespace}}}bookViews")
+            workbook.insert(0, book_views)
+        workbook_view = book_views.find(f"{{{namespace}}}workbookView")
+        if workbook_view is None:
+            workbook_view = ElementTree.SubElement(book_views, f"{{{namespace}}}workbookView")
+        workbook_view.set("activeTab", str(target_sheet_index))
+        contents["xl/workbook.xml"] = ElementTree.tostring(workbook, encoding="utf-8", xml_declaration=True)
 
     for sheet in sheets:
         sheet_name = sheet.get("name")
@@ -293,6 +306,16 @@ def _set_opening_view(
                 selection = ElementTree.SubElement(sheet_view, f"{{{namespace}}}selection")
             selection.set("activeCell", focus[1])
             selection.set("sqref", focus[1])
+        elif sheet_name == EU_GERMANY_SHEET["sheetName"] and template_eu_sheet_views is not None:
+            current_sheet_views = worksheet.find(f"{{{namespace}}}sheetViews")
+            if current_sheet_views is not None:
+                worksheet.remove(current_sheet_views)
+            sheet_format = worksheet.find(f"{{{namespace}}}sheetFormatPr")
+            sheet_view_index = list(worksheet).index(sheet_format) if sheet_format is not None else 0
+            original_sheet_views = ElementTree.fromstring(
+                ElementTree.tostring(template_eu_sheet_views, encoding="utf-8")
+            )
+            worksheet.insert(sheet_view_index, original_sheet_views)
         contents[sheet_path] = ElementTree.tostring(worksheet, encoding="utf-8", xml_declaration=True)
 
     with ZipFile(temporary_path, "w", ZIP_DEFLATED) as target:

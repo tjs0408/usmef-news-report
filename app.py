@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from flask import Flask, jsonify, redirect, render_template, request, send_file, url_for
 
-from src.crawler import fetch_market_data_for_report_dates
+from src.crawler import fetch_market_data_for_report_dates, fetch_usd_krw_exchange_rates
 from src.template_report import find_pending_report_dates, write_market_data_to_template
 
 
@@ -109,11 +109,14 @@ def _run_report_job(job_id: str, template_path: Path) -> None:
             )
 
         market_data = fetch_market_data_for_report_dates(report_dates, update_ocr_progress)
-        _update_job(job_id, progress=75, message="수집한 값을 엑셀 양식에 입력하고 있습니다.")
+        _update_job(job_id, progress=72, message="날짜별 USD/KRW 매매기준율을 확인하고 있습니다.")
+        exchange_dates = {date.fromisoformat(str(row["exchangeDate"])) for row in pending_rows}
+        exchange_rates = fetch_usd_krw_exchange_rates(exchange_dates)
+        _update_job(job_id, progress=75, message="수집한 값과 환율을 엑셀 양식에 입력하고 있습니다.")
         created_at = datetime.now().strftime("%Y%m%d_%H%M%S")
         report_filename = f"해외시장_수급_및_가격_동향_{created_at}.xlsx"
         report_path = OUTPUT_DIR / report_filename
-        write_market_data_to_template(template_path, report_path, pending_rows, market_data)
+        write_market_data_to_template(template_path, report_path, pending_rows, market_data, exchange_rates)
         _update_job(
             job_id,
             status="completed",

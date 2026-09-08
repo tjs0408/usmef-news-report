@@ -25,6 +25,10 @@ const marketSheets = [
   { sheetName: "돼지-미국", dateColumn: "FD", currentColumn: "FF", revisionColumn: "FG", priceColumn: "FH", kgPriceColumn: "FI", market: "pork" },
 ];
 
+function writeKgPrice(sheet, item) {
+  sheet.getRange(`${item.kgPriceColumn}${item.row}`).formulas = [[`=${item.priceColumn}${item.row}*2.20462`]];
+}
+
 if (mode === "pending") {
   const [templatePath, today] = arguments_;
   const workbook = await loadTemplate(templatePath);
@@ -69,7 +73,7 @@ if (mode === "pending") {
         previousSlaughterCount === previousWeekSlaughterCount ? null : previousSlaughterCount,
         cutoutPrice,
       ]];
-      sheet.getRange(`${item.kgPriceColumn}${item.row}`).formulas = [[`=${item.priceColumn}${item.row}*2.20462`]];
+      writeKgPrice(sheet, item);
       continue;
     }
 
@@ -87,7 +91,7 @@ if (mode === "pending") {
         recordedPreviousSlaughterCount,
       ]];
     }
-    sheet.getRange(`${item.kgPriceColumn}${item.row}`).formulas = [[`=${item.priceColumn}${item.row}*2.20462`]];
+    writeKgPrice(sheet, item);
   }
 
   await fs.mkdir(path.dirname(outputPath), { recursive: true });

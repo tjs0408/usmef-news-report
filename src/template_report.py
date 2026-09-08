@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 from typing import Mapping, Sequence
 import xml.etree.ElementTree as ElementTree
@@ -20,8 +21,8 @@ SPREADSHEET_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/ma
 RELATIONSHIP_NAMESPACE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PACKAGE_RELATIONSHIP_NAMESPACE = "http://schemas.openxmlformats.org/package/2006/relationships"
 MARKET_SHEETS = (
-    {"sheetName": "소-미국", "dateColumn": "EO", "currentColumn": "EQ", "revisionColumn": "ER", "priceColumn": "ES", "kgPriceColumn": "ET", "market": "beef"},
-    {"sheetName": "돼지-미국", "dateColumn": "FD", "currentColumn": "FF", "revisionColumn": "FG", "priceColumn": "FH", "kgPriceColumn": "FI", "market": "pork"},
+    {"sheetName": "소-미국", "dateColumn": "EO", "currentColumn": "EQ", "revisionColumn": "ER", "priceColumn": "ES", "kgPriceColumn": "ET", "exchangeColumn": "EU", "wonPriceColumn": "EV", "market": "beef"},
+    {"sheetName": "돼지-미국", "dateColumn": "FD", "currentColumn": "FF", "revisionColumn": "FG", "priceColumn": "FH", "kgPriceColumn": "FI", "exchangeColumn": "FJ", "wonPriceColumn": "FK", "market": "pork"},
 )
 
 
@@ -40,7 +41,14 @@ def find_pending_report_dates(template_path: Path, today: date) -> list[dict[str
                 friday = _excel_serial_to_date(friday_serial)
                 report_date = friday + timedelta(days=5)
                 if report_date <= today:
-                    pending.append({**config, "row": row, "reportDate": report_date.isoformat()})
+                    pending.append(
+                        {
+                            **config,
+                            "row": row,
+                            "reportDate": report_date.isoformat(),
+                            "exchangeDate": friday.isoformat(),
+                        }
+                    )
     return pending
 
 
@@ -49,8 +57,9 @@ def write_market_data_to_template(
     output_path: Path,
     pending_rows: Sequence[Mapping[str, object]],
     market_data: Sequence[Mapping[str, object]],
+    exchange_rates: Mapping[date, float],
 ) -> None:
-    """수집값을 입력하고, 다음 주 뉴스로 이전 주 도축두수를 정정합니다."""
+    """수집값·환율을 입력하고, 다음 주 뉴스로 이전 주 도축두수를 정정합니다."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pending_path = output_path.with_suffix(".pending.json")
     market_data_path = output_path.with_suffix(".market-data.json")
@@ -66,8 +75,15 @@ def write_market_data_to_template(
         }
         for item in market_data
     ]
+    serialized_pending_rows = [
+        {
+            **item,
+            "exchangeRate": exchange_rates[date.fromisoformat(str(item["exchangeDate"]))],
+        }
+        for item in pending_rows
+    ]
     try:
-        pending_path.write_text(json.dumps(list(pending_rows)), encoding="utf-8")
+        pending_path.write_text(json.dumps(serialized_pending_rows), encoding="utf-8")
         market_data_path.write_text(json.dumps(serialized_data), encoding="utf-8")
         _run_template_script(
             "fill",
@@ -76,7 +92,7 @@ def write_market_data_to_template(
             str(pending_path),
             str(market_data_path),
         )
-        _set_opening_view(output_path, pending_rows)
+        _set_opening_view(output_path, pending_rows, exchange_rates)
     finally:
         pending_path.unlink(missing_ok=True)
         market_data_path.unlink(missing_ok=True)
@@ -134,8 +150,12 @@ def _excel_serial_to_date(value: str) -> date:
     return (datetime(1899, 12, 30) + timedelta(days=float(value))).date()
 
 
-def _set_opening_view(output_path: Path, pending_rows: Sequence[Mapping[str, object]]) -> None:
-    """소·돼지 시트를 각각 마지막으로 현행화한 주차가 보이게 설정합니다."""
+def _set_opening_view(
+    output_path: Path,
+    pending_rows: Sequence[Mapping[str, object]],
+    exchange_rates: Mapping[date, float],
+) -> None:
+    """환율·원화 환산값과, 각 시트의 마지막 현행화 위치를 설정합니다."""
     namespace = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
     relationship_namespace = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
     package_relationship_namespace = "http://schemas.openxmlformats.org/package/2006/relationships"
@@ -178,29 +198,41 @@ def _set_opening_view(output_path: Path, pending_rows: Sequence[Mapping[str, obj
     for sheet in sheets:
         sheet_name = sheet.get("name")
         focus = focus_by_sheet.get(sheet_name)
-        if focus is None:
+        pending_for_sheet = [item for item in pending_rows if item["sheetName"] == sheet_name]
+        if focus is None and not pending_for_sheet:
             continue
         relationship_target = relationship_targets[sheet.get(f"{{{relationship_namespace}}}id")]
         sheet_path = relationship_target.lstrip("/") if relationship_target.startswith("/") else f"xl/{relationship_target}"
         worksheet = ElementTree.fromstring(contents[sheet_path])
-        sheet_views = worksheet.find(f"{{{namespace}}}sheetViews")
-        if sheet_views is None:
-            sheet_views = ElementTree.Element(f"{{{namespace}}}sheetViews")
-        else:
-            worksheet.remove(sheet_views)
-        sheet_format = worksheet.find(f"{{{namespace}}}sheetFormatPr")
-        sheet_view_index = list(worksheet).index(sheet_format) if sheet_format is not None else 0
-        worksheet.insert(sheet_view_index, sheet_views)
-        sheet_view = sheet_views.find(f"{{{namespace}}}sheetView")
-        if sheet_view is None:
-            sheet_view = ElementTree.SubElement(sheet_views, f"{{{namespace}}}sheetView")
-        sheet_view.set("workbookViewId", "0")
-        sheet_view.set("topLeftCell", focus[0])
-        selection = sheet_view.find(f"{{{namespace}}}selection")
-        if selection is None:
-            selection = ElementTree.SubElement(sheet_view, f"{{{namespace}}}selection")
-        selection.set("activeCell", focus[1])
-        selection.set("sqref", focus[1])
+        for item in pending_for_sheet:
+            exchange_date = date.fromisoformat(str(item["exchangeDate"]))
+            exchange_rate = exchange_rates[exchange_date]
+            row = int(item["row"])
+            kg_price = _worksheet_number(worksheet, f"{item['kgPriceColumn']}{row}")
+            if kg_price is None:
+                raise RuntimeError(f"{sheet_name} {row}행의 미국($/kg) 값을 계산하지 못했습니다.")
+            _set_worksheet_number(worksheet, f"{item['exchangeColumn']}{row}", exchange_rate)
+            _set_worksheet_number(worksheet, f"{item['wonPriceColumn']}{row}", kg_price * exchange_rate)
+
+        if focus is not None:
+            sheet_views = worksheet.find(f"{{{namespace}}}sheetViews")
+            if sheet_views is None:
+                sheet_views = ElementTree.Element(f"{{{namespace}}}sheetViews")
+            else:
+                worksheet.remove(sheet_views)
+            sheet_format = worksheet.find(f"{{{namespace}}}sheetFormatPr")
+            sheet_view_index = list(worksheet).index(sheet_format) if sheet_format is not None else 0
+            worksheet.insert(sheet_view_index, sheet_views)
+            sheet_view = sheet_views.find(f"{{{namespace}}}sheetView")
+            if sheet_view is None:
+                sheet_view = ElementTree.SubElement(sheet_views, f"{{{namespace}}}sheetView")
+            sheet_view.set("workbookViewId", "0")
+            sheet_view.set("topLeftCell", focus[0])
+            selection = sheet_view.find(f"{{{namespace}}}selection")
+            if selection is None:
+                selection = ElementTree.SubElement(sheet_view, f"{{{namespace}}}selection")
+            selection.set("activeCell", focus[1])
+            selection.set("sqref", focus[1])
         contents[sheet_path] = ElementTree.tostring(worksheet, encoding="utf-8", xml_declaration=True)
 
     with ZipFile(temporary_path, "w", ZIP_DEFLATED) as target:
@@ -208,3 +240,60 @@ def _set_opening_view(output_path: Path, pending_rows: Sequence[Mapping[str, obj
             target.writestr(info_by_name[name], data)
 
     temporary_path.replace(output_path)
+
+
+def _worksheet_number(worksheet: ElementTree.Element, reference: str) -> float | None:
+    """xlsx 워크시트에서 숫자 셀의 현재 값을 읽습니다."""
+    cell = worksheet.find(f".//{{{SPREADSHEET_NAMESPACE}}}c[@r='{reference}']")
+    if cell is None:
+        return None
+    value = cell.find(f"{{{SPREADSHEET_NAMESPACE}}}v")
+    if value is None or value.text is None:
+        return None
+    try:
+        return float(value.text)
+    except ValueError:
+        return None
+
+
+def _set_worksheet_number(worksheet: ElementTree.Element, reference: str, value: float) -> None:
+    """기존 숫자 셀의 캐시 값을 갱신합니다. 양식의 서식·수식은 보존합니다."""
+    cell = worksheet.find(f".//{{{SPREADSHEET_NAMESPACE}}}c[@r='{reference}']")
+    if cell is None:
+        cell = _create_worksheet_cell(worksheet, reference)
+    cell.attrib.pop("t", None)
+    value_node = cell.find(f"{{{SPREADSHEET_NAMESPACE}}}v")
+    if value_node is None:
+        value_node = ElementTree.SubElement(cell, f"{{{SPREADSHEET_NAMESPACE}}}v")
+    value_node.text = str(value)
+
+
+def _create_worksheet_cell(worksheet: ElementTree.Element, reference: str) -> ElementTree.Element:
+    """비어 있어 내보내기 과정에서 사라진 양식 셀을 같은 행에 다시 만듭니다."""
+    match = re.fullmatch(r"([A-Z]+)(\d+)", reference)
+    if match is None:
+        raise RuntimeError(f"잘못된 Excel 셀 주소입니다: {reference}")
+    column, row_number = match.groups()
+    sheet_data = worksheet.find(f"{{{SPREADSHEET_NAMESPACE}}}sheetData")
+    if sheet_data is None:
+        raise RuntimeError("업로드한 양식에서 셀 데이터를 찾지 못했습니다.")
+    row = sheet_data.find(f"{{{SPREADSHEET_NAMESPACE}}}row[@r='{row_number}']")
+    if row is None:
+        raise RuntimeError(f"업로드한 양식에서 {row_number}행을 찾지 못했습니다.")
+    cell = ElementTree.Element(f"{{{SPREADSHEET_NAMESPACE}}}c", {"r": reference})
+    target_column_number = _excel_column_number(column)
+    for index, existing_cell in enumerate(list(row)):
+        existing_reference = existing_cell.get("r", "")
+        existing_column = "".join(character for character in existing_reference if character.isalpha())
+        if existing_column and _excel_column_number(existing_column) > target_column_number:
+            row.insert(index, cell)
+            return cell
+    row.append(cell)
+    return cell
+
+
+def _excel_column_number(column: str) -> int:
+    result = 0
+    for character in column:
+        result = result * 26 + ord(character) - ord("A") + 1
+    return result

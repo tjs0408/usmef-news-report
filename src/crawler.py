@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from functools import lru_cache
+import json
 from pathlib import Path
 import re
 from tempfile import TemporaryDirectory
 from typing import Any, Callable, Literal
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import pymupdf
@@ -16,6 +18,7 @@ from rapidocr import ModelType, OCRVersion, RapidOCR
 
 
 NEWSLINE_URL = "https://www.usmef.co.kr/main/newsline.php"
+EXCHANGE_RATE_API_URL = "https://stock.naver.com/api/stockSecurity/exchange-rates/v2/USD/daily"
 REQUEST_TIMEOUT_SECONDS = 60
 USER_AGENT = "USMEF-Weekly-Market-Report/1.0 (+https://github.com/tjs0408/usmef-news-report)"
 
@@ -49,6 +52,47 @@ def fetch_market_data_for_report_dates(
         missing_text = ", ".join(report_date.isoformat() for report_date in missing_dates)
         raise RuntimeError(f"뉴스라인 1페이지에서 요청한 발행일을 찾지 못했습니다: {missing_text}")
     return _fetch_market_data_from_entries(entries, progress_callback)
+
+
+def fetch_usd_krw_exchange_rates(exchange_dates: set[date]) -> dict[date, float]:
+    """네이버 증권의 날짜별 USD/KRW 매매기준율을 반환합니다."""
+    if not exchange_dates:
+        return {}
+
+    rates: dict[date, float] = {}
+    cursor: str | None = None
+    oldest_requested_date = min(exchange_dates)
+    while True:
+        parameters: dict[str, str] = {"bankType": "hana", "size": "20"}
+        if cursor:
+            parameters["cursor"] = cursor
+        response = _download_exchange_rate_bytes(f"{EXCHANGE_RATE_API_URL}?{urlencode(parameters)}")
+        try:
+            payload = json.loads(response.decode("utf-8"))
+            items = payload["items"]
+        except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as error:
+            raise RuntimeError("네이버 증권에서 환율 데이터를 읽지 못했습니다.") from error
+
+        page_dates: list[date] = []
+        for item in items:
+            item_date = date.fromisoformat(str(item["date"]))
+            page_dates.append(item_date)
+            if item_date in exchange_dates:
+                rates[item_date] = float(str(item["saleBaseRate"]).replace(",", ""))
+
+        if exchange_dates.issubset(rates) or not payload.get("hasNext"):
+            break
+        if page_dates and min(page_dates) < oldest_requested_date:
+            break
+        cursor = payload.get("cursor")
+        if not cursor:
+            break
+
+    missing_dates = sorted(exchange_dates - set(rates))
+    if missing_dates:
+        missing_text = ", ".join(item.isoformat() for item in missing_dates)
+        raise RuntimeError(f"네이버 증권에서 해당 날짜의 USD/KRW 매매기준율을 찾지 못했습니다: {missing_text}")
+    return rates
 
 
 def _fetch_market_data_from_entries(
@@ -104,6 +148,22 @@ def _download_bytes(url: str) -> bytes:
             return response.read()
     except OSError as error:
         raise RuntimeError("USMEF 서버에서 뉴스라인 파일을 가져오지 못했습니다.") from error
+
+
+def _download_exchange_rate_bytes(url: str) -> bytes:
+    """네이버 증권 환율 API를 브라우저 요청 형식으로 읽습니다."""
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://stock.naver.com/marketindex/exchange/FX_USDKRW/price",
+        },
+    )
+    try:
+        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            return response.read()
+    except OSError as error:
+        raise RuntimeError("네이버 증권에서 USD/KRW 환율 데이터를 가져오지 못했습니다.") from error
 
 
 def _find_first_page_pdf_entries(html: str) -> list[tuple[datetime, str]]:

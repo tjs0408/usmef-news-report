@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from functools import lru_cache
 from pathlib import Path
 import re
@@ -27,6 +27,28 @@ def fetch_first_page_market_data() -> list[dict[str, object]]:
     첫 페이지를 고해상도로 렌더링한 뒤, 한국어 OCR로 필요한 값만 읽습니다.
     """
     entries = _find_first_page_pdf_entries(_download_text(NEWSLINE_URL))
+    return _fetch_market_data_from_entries(entries)
+
+
+def fetch_market_data_for_report_dates(report_dates: set[date]) -> list[dict[str, object]]:
+    """지정한 발행일의 뉴스라인 PDF에서 소고기 지표를 수집합니다.
+
+    엑셀의 금요일 주차 행은 다음 주 수요일에 발행된 뉴스라인과 연결됩니다.
+    필요한 행만 채울 때에는 전체 첫 페이지를 OCR 처리하지 않도록 이 함수를 씁니다.
+    """
+    entries = [
+        entry
+        for entry in _find_first_page_pdf_entries(_download_text(NEWSLINE_URL))
+        if entry[0].date() in report_dates
+    ]
+    missing_dates = sorted(report_dates - {report_date.date() for report_date, _ in entries})
+    if missing_dates:
+        missing_text = ", ".join(report_date.isoformat() for report_date in missing_dates)
+        raise RuntimeError(f"뉴스라인 1페이지에서 요청한 발행일을 찾지 못했습니다: {missing_text}")
+    return _fetch_market_data_from_entries(entries)
+
+
+def _fetch_market_data_from_entries(entries: list[tuple[datetime, str]]) -> list[dict[str, object]]:
     market_data: list[dict[str, object]] = []
     failures: list[str] = []
 
@@ -53,6 +75,7 @@ def _extract_market_data(pdf_url: str, report_date: datetime) -> dict[str, objec
     return {
         "구분": report_date.date(),
         "도축두수": _find_beef_slaughter_count(ocr_lines, page_width, page_height),
+        "usda 수정": _find_beef_previous_slaughter_count(ocr_lines, page_width, page_height),
         "미국($/lb)": _find_beef_cutout_price(ocr_lines, page_width, page_height),
     }
 
@@ -187,19 +210,13 @@ def _find_beef_cutout_price(lines: list[dict[str, Any]], page_width: float, page
 
 
 def _find_beef_slaughter_count(lines: list[dict[str, Any]], page_width: float, page_height: float) -> int:
-    section = lines
-    right_column_start = 0
-    slaughter_label = next((line for line in sorted(section, key=lambda line: line["top"])
-                            if line["left"] >= right_column_start and "도축두수" in _compact(line["text"])), None)
-    if slaughter_label is None:
-        raise RuntimeError("소고기 도축두수 항목을 찾지 못했습니다.")
+    slaughter_label = _find_beef_slaughter_label(lines)
 
     candidates = sorted(
         (
             line
-            for line in section
-            if line["left"] >= right_column_start
-            and slaughter_label["top"] <= line["top"] <= slaughter_label["top"] + 850
+            for line in lines
+            if slaughter_label["top"] <= line["top"] <= slaughter_label["top"] + 850
             and "전주" not in _compact(line["text"])
         ),
         key=lambda line: line["top"],
@@ -209,6 +226,39 @@ def _find_beef_slaughter_count(lines: list[dict[str, Any]], page_width: float, p
         if count is not None:
             return count
     raise RuntimeError("소고기 도축두수를 읽지 못했습니다.")
+
+
+def _find_beef_previous_slaughter_count(lines: list[dict[str, Any]], page_width: float, page_height: float) -> int:
+    """소고기 도축두수 카드의 '전 주' 수치를 천두 단위로 반환합니다."""
+    slaughter_label = _find_beef_slaughter_label(lines)
+    candidates = sorted(
+        (
+            line
+            for line in lines
+            if slaughter_label["top"] <= line["top"] <= slaughter_label["top"] + 850
+            and "전주" in _compact(line["text"])
+        ),
+        key=lambda line: line["top"],
+    )
+    for line in candidates:
+        count = _korean_head_to_thousands(line["text"])
+        if count is not None:
+            return count
+        compact = _compact(line["text"])
+        match = re.search(r"전주\D*(\d{2,3})(?:천두|000두)?", compact)
+        if match is not None:
+            return int(match.group(1))
+    raise RuntimeError("소고기 전 주 도축두수를 읽지 못했습니다.")
+
+
+def _find_beef_slaughter_label(lines: list[dict[str, Any]]) -> dict[str, Any]:
+    slaughter_label = next(
+        (line for line in sorted(lines, key=lambda line: line["top"]) if "도축두수" in _compact(line["text"])),
+        None,
+    )
+    if slaughter_label is None:
+        raise RuntimeError("소고기 도축두수 항목을 찾지 못했습니다.")
+    return slaughter_label
 
 
 def _korean_head_to_thousands(value: str) -> int | None:

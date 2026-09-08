@@ -2,7 +2,9 @@
 __pycache__/
 *.py[cod]
 .venv/
-work/
+work/*
+!work/template_report.mjs
+report_template/*.xlsx
 
 # Generated reports
 output/*.xlsx

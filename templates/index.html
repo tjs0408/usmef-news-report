@@ -13,13 +13,13 @@
       <p class="eyebrow">U.S. MEAT EXPORT FEDERATION</p>
       <h1 id="page-title">주간 해외 동향 리포트</h1>
       <p class="description">
-        USMEF Korea 뉴스라인 1페이지의 모든 게시물에서 미국 소고기 컷아웃 가격과 도축두수를 수집해 Excel 파일로 만듭니다.
+        엑셀 양식의 빈 주차 행에 USMEF Korea 뉴스라인의 미국 소고기 도축두수와 컷아웃 가격을 채웁니다.
       </p>
 
       <div class="report-details" aria-label="보고서 구성">
         <div>
           <span class="detail-label">데이터 원본</span>
-          <strong>USMEF Korea 뉴스라인 1페이지</strong>
+          <strong>USMEF Korea 뉴스라인 · 기존 엑셀 양식</strong>
         </div>
         <div>
           <span class="detail-label">파일 형식</span>
@@ -27,7 +27,7 @@
         </div>
         <div>
           <span class="detail-label">포함 항목</span>
-          <strong>구분 · 도축두수 · 미국($/lb)</strong>
+          <strong>도축두수 · USDA 수정 · 컷아웃 가격</strong>
         </div>
       </div>
 
@@ -38,7 +38,7 @@
         </button>
       </form>
       <p id="status-message" class="status-message" aria-live="polite">
-        생성된 파일은 브라우저 다운로드 폴더와 프로젝트의 output 폴더에 저장됩니다.
+        금요일 주차 행에는 다음 주 수요일 뉴스 데이터를 반영합니다.
       </p>
     </section>
   </main>
@@ -51,7 +51,7 @@
     form.addEventListener("submit", () => {
       button.disabled = true;
       button.classList.add("is-loading");
-      status.textContent = "최신 뉴스라인을 분석해 Excel 파일을 만들고 있습니다.";
+      status.textContent = "양식의 비어 있는 주차 행을 현행화하고 있습니다.";
     });
   </script>
 </body>

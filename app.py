@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 import os
 from pathlib import Path
 
 from flask import Flask, redirect, render_template, send_file, url_for
 
-from src.crawler import fetch_first_page_market_data
-from src.excel_writer import write_market_data_to_excel
+from src.crawler import fetch_market_data_for_report_dates
+from src.template_report import find_pending_report_dates, write_market_data_to_template
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 OUTPUT_DIR = PROJECT_ROOT / "output"
+TEMPLATE_PATH = PROJECT_ROOT / "report_template" / "해외시장_수급_및_가격_동향_양식.xlsx"
 
 app = Flask(__name__)
 
@@ -32,13 +33,19 @@ def generate_report_page():
 
 @app.post("/generate-report")
 def generate_report():
-    """최신 소고기 지표를 수집하고 생성한 Excel 파일을 내려줍니다."""
+    """양식의 비어 있는 주차 행에 USMEF 소고기 지표를 채워 내려줍니다."""
     try:
-        market_data = fetch_first_page_market_data()
+        if not TEMPLATE_PATH.exists():
+            raise RuntimeError("보고서 엑셀 양식을 찾지 못했습니다.")
+        pending_rows = find_pending_report_dates(TEMPLATE_PATH, date.today())
+        if not pending_rows:
+            raise RuntimeError("현재 양식에서 현행화할 주차가 없습니다.")
+        report_dates = {date.fromisoformat(str(row["reportDate"])) for row in pending_rows}
+        market_data = fetch_market_data_for_report_dates(report_dates)
         created_at = datetime.now().strftime("%Y%m%d_%H%M%S")
-        report_filename = f"usmef_weekly_market_report_{created_at}.xlsx"
+        report_filename = f"해외시장_수급_및_가격_동향_{created_at}.xlsx"
         report_path = OUTPUT_DIR / report_filename
-        write_market_data_to_excel(market_data, report_path)
+        write_market_data_to_template(TEMPLATE_PATH, report_path, pending_rows, market_data)
     except RuntimeError as error:
         app.logger.exception("USMEF 뉴스라인 보고서 생성 실패")
         return f"보고서 생성에 실패했습니다: {error}", 502

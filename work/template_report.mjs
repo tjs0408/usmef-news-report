@@ -21,8 +21,8 @@ async function loadTemplate(templatePath) {
 }
 
 const marketSheets = [
-  { sheetName: "소-미국", dateColumn: "EO", currentColumn: "EQ", outputColumns: "EQ:ES", priceColumn: "ES", kgPriceColumn: "ET", market: "beef" },
-  { sheetName: "돼지-미국", dateColumn: "FD", currentColumn: "FF", outputColumns: "FF:FH", priceColumn: "FH", kgPriceColumn: "FI", market: "pork" },
+  { sheetName: "소-미국", dateColumn: "EO", currentColumn: "EQ", revisionColumn: "ER", priceColumn: "ES", kgPriceColumn: "ET", market: "beef" },
+  { sheetName: "돼지-미국", dateColumn: "FD", currentColumn: "FF", revisionColumn: "FG", priceColumn: "FH", kgPriceColumn: "FI", market: "pork" },
 ];
 
 if (mode === "pending") {
@@ -58,15 +58,24 @@ if (mode === "pending") {
     if (!data) continue;
     const sheet = workbook.worksheets.getItem(item.sheetName);
     const isPork = item.market === "pork";
-    const previousWeekSlaughterCount = sheet.getRange(`${item.currentColumn}${item.row - 1}`).values[0][0];
-    const values = isPork
+    const [slaughterCount, previousSlaughterCount, cutoutPrice] = isPork
       ? [data.porkSlaughterCount, data.porkPreviousSlaughterCount, data.porkCutoutPrice]
       : [data.slaughterCount, data.previousSlaughterCount, data.cutoutPrice];
-    sheet.getRange(`${item.outputColumns.split(":")[0]}${item.row}:${item.outputColumns.split(":")[1]}${item.row}`).values = [[
-      values[0],
-      values[1] === previousWeekSlaughterCount ? null : values[1],
-      values[2],
+
+    sheet.getRange(`${item.currentColumn}${item.row}:${item.priceColumn}${item.row}`).values = [[
+      slaughterCount,
+      null,
+      cutoutPrice,
     ]];
+
+    const previousRow = item.row - 1;
+    const recordedPreviousSlaughterCount = sheet.getRange(`${item.currentColumn}${previousRow}`).values[0][0];
+    if (previousSlaughterCount !== null && previousSlaughterCount !== recordedPreviousSlaughterCount) {
+      sheet.getRange(`${item.currentColumn}${previousRow}:${item.revisionColumn}${previousRow}`).values = [[
+        previousSlaughterCount,
+        recordedPreviousSlaughterCount,
+      ]];
+    }
     sheet.getRange(`${item.kgPriceColumn}${item.row}`).formulas = [[`=${item.priceColumn}${item.row}*2.20462`]];
   }
 

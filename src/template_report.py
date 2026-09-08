@@ -20,8 +20,8 @@ SPREADSHEET_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/ma
 RELATIONSHIP_NAMESPACE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PACKAGE_RELATIONSHIP_NAMESPACE = "http://schemas.openxmlformats.org/package/2006/relationships"
 MARKET_SHEETS = (
-    {"sheetName": "소-미국", "dateColumn": "EO", "currentColumn": "EQ", "outputColumns": "EQ:ES", "priceColumn": "ES", "kgPriceColumn": "ET", "market": "beef"},
-    {"sheetName": "돼지-미국", "dateColumn": "FD", "currentColumn": "FF", "outputColumns": "FF:FH", "priceColumn": "FH", "kgPriceColumn": "FI", "market": "pork"},
+    {"sheetName": "소-미국", "dateColumn": "EO", "currentColumn": "EQ", "revisionColumn": "ER", "priceColumn": "ES", "kgPriceColumn": "ET", "market": "beef"},
+    {"sheetName": "돼지-미국", "dateColumn": "FD", "currentColumn": "FF", "revisionColumn": "FG", "priceColumn": "FH", "kgPriceColumn": "FI", "market": "pork"},
 )
 
 
@@ -50,7 +50,7 @@ def write_market_data_to_template(
     pending_rows: Sequence[Mapping[str, object]],
     market_data: Sequence[Mapping[str, object]],
 ) -> None:
-    """수집값을 소-미국 탭에 쓰고, 전 주 값이 같으면 USDA 수정 칸을 비웁니다."""
+    """수집값을 입력하고, 다음 주 뉴스로 이전 주 도축두수를 정정합니다."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pending_path = output_path.with_suffix(".pending.json")
     market_data_path = output_path.with_suffix(".market-data.json")
@@ -76,7 +76,7 @@ def write_market_data_to_template(
             str(pending_path),
             str(market_data_path),
         )
-        _set_opening_view(output_path)
+        _set_opening_view(output_path, pending_rows)
     finally:
         pending_path.unlink(missing_ok=True)
         market_data_path.unlink(missing_ok=True)
@@ -93,6 +93,9 @@ def _run_template_script(*arguments: str) -> str:
             encoding="utf-8",
             timeout=120,
         )
+    except subprocess.CalledProcessError as error:
+        details = error.stderr.strip() if error.stderr else str(error)
+        raise RuntimeError(f"엑셀 양식을 처리하지 못했습니다. ({details})") from error
     except (OSError, subprocess.SubprocessError) as error:
         raise RuntimeError(f"엑셀 양식을 처리하지 못했습니다. ({error})") from error
     return completed.stdout
@@ -131,8 +134,8 @@ def _excel_serial_to_date(value: str) -> date:
     return (datetime(1899, 12, 30) + timedelta(days=float(value))).date()
 
 
-def _set_opening_view(output_path: Path) -> None:
-    """파일을 열면 소-미국 탭의 새 입력 위치부터 보이도록 설정합니다."""
+def _set_opening_view(output_path: Path, pending_rows: Sequence[Mapping[str, object]]) -> None:
+    """소·돼지 시트를 각각 마지막으로 현행화한 주차가 보이게 설정합니다."""
     namespace = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
     relationship_namespace = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
     package_relationship_namespace = "http://schemas.openxmlformats.org/package/2006/relationships"
@@ -145,18 +148,22 @@ def _set_opening_view(output_path: Path) -> None:
 
     workbook = ElementTree.fromstring(contents["xl/workbook.xml"])
     sheets = workbook.findall(f"{{{namespace}}}sheets/{{{namespace}}}sheet")
-    target_sheet_index, target_sheet = next(
-        (index, sheet) for index, sheet in enumerate(sheets) if sheet.get("name") == "소-미국"
-    )
-    relationship_id = target_sheet.get(f"{{{relationship_namespace}}}id")
     relationships = ElementTree.fromstring(contents["xl/_rels/workbook.xml.rels"])
-    relationship = next(
-        item
+    relationship_targets = {
+        item.get("Id"): item.get("Target")
         for item in relationships.findall(f"{{{package_relationship_namespace}}}Relationship")
-        if item.get("Id") == relationship_id
-    )
-    relationship_target = relationship.get("Target")
-    sheet_path = relationship_target.lstrip("/") if relationship_target.startswith("/") else f"xl/{relationship_target}"
+    }
+    focus_by_sheet: dict[str, tuple[str, str]] = {}
+    for item in pending_rows:
+        sheet_name = str(item["sheetName"])
+        row = int(item["row"])
+        date_column = str(item["dateColumn"])
+        previous_focus = focus_by_sheet.get(sheet_name)
+        if previous_focus is None or row > int(previous_focus[1][len(date_column) :]):
+            focus_by_sheet[sheet_name] = (f"{date_column}{max(8, row - 1)}", f"{date_column}{row}")
+
+    active_sheet_name = "소-미국" if "소-미국" in focus_by_sheet else next(iter(focus_by_sheet))
+    target_sheet_index = next(index for index, sheet in enumerate(sheets) if sheet.get("name") == active_sheet_name)
 
     book_views = workbook.find(f"{{{namespace}}}bookViews")
     if book_views is None:
@@ -168,26 +175,33 @@ def _set_opening_view(output_path: Path) -> None:
     workbook_view.set("activeTab", str(target_sheet_index))
     contents["xl/workbook.xml"] = ElementTree.tostring(workbook, encoding="utf-8", xml_declaration=True)
 
-    worksheet = ElementTree.fromstring(contents[sheet_path])
-    sheet_views = worksheet.find(f"{{{namespace}}}sheetViews")
-    if sheet_views is None:
-        sheet_views = ElementTree.Element(f"{{{namespace}}}sheetViews")
-    else:
-        worksheet.remove(sheet_views)
-    sheet_format = worksheet.find(f"{{{namespace}}}sheetFormatPr")
-    sheet_view_index = list(worksheet).index(sheet_format) if sheet_format is not None else 0
-    worksheet.insert(sheet_view_index, sheet_views)
-    sheet_view = sheet_views.find(f"{{{namespace}}}sheetView")
-    if sheet_view is None:
-        sheet_view = ElementTree.SubElement(sheet_views, f"{{{namespace}}}sheetView")
-    sheet_view.set("workbookViewId", "0")
-    sheet_view.set("topLeftCell", "EO41")
-    selection = sheet_view.find(f"{{{namespace}}}selection")
-    if selection is None:
-        selection = ElementTree.SubElement(sheet_view, f"{{{namespace}}}selection")
-    selection.set("activeCell", "EO41")
-    selection.set("sqref", "EO41")
-    contents[sheet_path] = ElementTree.tostring(worksheet, encoding="utf-8", xml_declaration=True)
+    for sheet in sheets:
+        sheet_name = sheet.get("name")
+        focus = focus_by_sheet.get(sheet_name)
+        if focus is None:
+            continue
+        relationship_target = relationship_targets[sheet.get(f"{{{relationship_namespace}}}id")]
+        sheet_path = relationship_target.lstrip("/") if relationship_target.startswith("/") else f"xl/{relationship_target}"
+        worksheet = ElementTree.fromstring(contents[sheet_path])
+        sheet_views = worksheet.find(f"{{{namespace}}}sheetViews")
+        if sheet_views is None:
+            sheet_views = ElementTree.Element(f"{{{namespace}}}sheetViews")
+        else:
+            worksheet.remove(sheet_views)
+        sheet_format = worksheet.find(f"{{{namespace}}}sheetFormatPr")
+        sheet_view_index = list(worksheet).index(sheet_format) if sheet_format is not None else 0
+        worksheet.insert(sheet_view_index, sheet_views)
+        sheet_view = sheet_views.find(f"{{{namespace}}}sheetView")
+        if sheet_view is None:
+            sheet_view = ElementTree.SubElement(sheet_views, f"{{{namespace}}}sheetView")
+        sheet_view.set("workbookViewId", "0")
+        sheet_view.set("topLeftCell", focus[0])
+        selection = sheet_view.find(f"{{{namespace}}}selection")
+        if selection is None:
+            selection = ElementTree.SubElement(sheet_view, f"{{{namespace}}}selection")
+        selection.set("activeCell", focus[1])
+        selection.set("sqref", focus[1])
+        contents[sheet_path] = ElementTree.tostring(worksheet, encoding="utf-8", xml_declaration=True)
 
     with ZipFile(temporary_path, "w", ZIP_DEFLATED) as target:
         for name, data in contents.items():

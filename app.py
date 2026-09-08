@@ -94,16 +94,22 @@ def _run_report_job(job_id: str, template_path: Path) -> None:
         report_dates = {date.fromisoformat(str(row["reportDate"])) for row in pending_rows}
         _update_job(job_id, progress=15, message=f"현행화할 뉴스 {len(report_dates)}건을 찾았습니다.")
 
-        def update_ocr_progress(index: int, total: int, report_date: date) -> None:
-            progress = 20 + round(index / total * 60)
+        def update_ocr_progress(index: int, total: int, report_date: date, stage: str) -> None:
+            completed_count = index - 1 if stage == "started" else index
+            progress = 20 + round(completed_count / total * 50)
+            message = (
+                f"뉴스라인 {index}/{total}건을 분석하고 있습니다. ({report_date:%Y-%m-%d})"
+                if stage == "started"
+                else f"뉴스라인 {index}/{total}건 분석을 완료했습니다. ({report_date:%Y-%m-%d})"
+            )
             _update_job(
                 job_id,
                 progress=progress,
-                message=f"뉴스라인 {index}/{total}건을 분석하고 있습니다. ({report_date:%Y-%m-%d})",
+                message=message,
             )
 
         market_data = fetch_market_data_for_report_dates(report_dates, update_ocr_progress)
-        _update_job(job_id, progress=85, message="수집한 값을 엑셀 양식에 입력하고 있습니다.")
+        _update_job(job_id, progress=75, message="수집한 값을 엑셀 양식에 입력하고 있습니다.")
         created_at = datetime.now().strftime("%Y%m%d_%H%M%S")
         report_filename = f"해외시장_수급_및_가격_동향_{created_at}.xlsx"
         report_path = OUTPUT_DIR / report_filename

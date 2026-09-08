@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 import re
 from tempfile import TemporaryDirectory
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 from urllib.request import Request, urlopen
 
 import pymupdf
@@ -32,7 +32,7 @@ def fetch_first_page_market_data() -> list[dict[str, object]]:
 
 def fetch_market_data_for_report_dates(
     report_dates: set[date],
-    progress_callback: Callable[[int, int, date], None] | None = None,
+    progress_callback: Callable[[int, int, date, Literal["started", "completed"]], None] | None = None,
 ) -> list[dict[str, object]]:
     """지정한 발행일의 뉴스라인 PDF에서 소고기 지표를 수집합니다.
 
@@ -53,16 +53,18 @@ def fetch_market_data_for_report_dates(
 
 def _fetch_market_data_from_entries(
     entries: list[tuple[datetime, str]],
-    progress_callback: Callable[[int, int, date], None] | None = None,
+    progress_callback: Callable[[int, int, date, Literal["started", "completed"]], None] | None = None,
 ) -> list[dict[str, object]]:
     market_data: list[dict[str, object]] = []
     failures: list[str] = []
 
     for index, (report_date, pdf_url) in enumerate(entries, start=1):
         if progress_callback is not None:
-            progress_callback(index, len(entries), report_date.date())
+            progress_callback(index, len(entries), report_date.date(), "started")
         try:
             market_data.append(_extract_market_data(pdf_url, report_date))
+            if progress_callback is not None:
+                progress_callback(index, len(entries), report_date.date(), "completed")
         except RuntimeError as error:
             failures.append(f"{report_date:%Y-%m-%d}: {error}")
 

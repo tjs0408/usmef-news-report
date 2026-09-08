@@ -70,7 +70,6 @@ if (mode === "pending") {
     sheet.getRange(`${item.kgPriceColumn}${item.row}`).formulas = [[`=${item.priceColumn}${item.row}*2.20462`]];
   }
 
-  workbook.recalculate();
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
   const output = await SpreadsheetFile.exportXlsx(workbook);
   await output.save(outputPath);

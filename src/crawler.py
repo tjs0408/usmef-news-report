@@ -172,7 +172,8 @@ def _read_pdf_with_ocr(pdf_bytes: bytes) -> tuple[list[dict[str, Any]], float, f
                 pixmap = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), clip=crop, alpha=False)
                 image_path = Path(temporary_directory) / f"newsline_{segment_index}.png"
                 image_path.write_bytes(pixmap.tobytes("png"))
-                result = _get_ocr()(str(image_path))
+                # 뉴스라인은 정방향 PDF이므로 방향 분류 추론은 생략해 OCR 시간을 줄인다.
+                result = _get_ocr()(str(image_path), use_cls=False)
                 if not result.txts or result.boxes is None:
                     continue
                 y_offset = float(crop.y0 * 2)

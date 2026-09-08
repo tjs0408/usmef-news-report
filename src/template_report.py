@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timedelta
 import json
 import os
 from pathlib import Path
@@ -16,12 +16,32 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WORK_DIR = PROJECT_ROOT / "work"
 NODE_EXECUTABLE = os.environ.get("ARTIFACT_NODE", "node")
 TEMPLATE_SCRIPT = WORK_DIR / "template_report.mjs"
+SPREADSHEET_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+RELATIONSHIP_NAMESPACE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+PACKAGE_RELATIONSHIP_NAMESPACE = "http://schemas.openxmlformats.org/package/2006/relationships"
+MARKET_SHEETS = (
+    {"sheetName": "소-미국", "dateColumn": "EO", "currentColumn": "EQ", "outputColumns": "EQ:ES", "priceColumn": "ES", "kgPriceColumn": "ET", "market": "beef"},
+    {"sheetName": "돼지-미국", "dateColumn": "FD", "currentColumn": "FF", "outputColumns": "FF:FH", "priceColumn": "FH", "kgPriceColumn": "FI", "market": "pork"},
+)
 
 
 def find_pending_report_dates(template_path: Path, today: date) -> list[dict[str, object]]:
-    """도축두수 칸이 비어 있고 발행일이 지난 양식 행을 찾습니다."""
-    result = _run_template_script("pending", str(template_path), today.isoformat())
-    return json.loads(result)
+    """도축두수 칸이 비어 있고 발행일이 지난 양식 행을 빠르게 찾습니다."""
+    with ZipFile(template_path, "r") as archive:
+        sheet_paths = _find_sheet_paths(archive)
+        pending: list[dict[str, object]] = []
+        for config in MARKET_SHEETS:
+            cell_values = _read_sheet_cell_values(archive, sheet_paths[config["sheetName"]])
+            for row in range(8, 61):
+                friday_serial = cell_values.get(f"{config['dateColumn']}{row}")
+                current_slaughter = cell_values.get(f"{config['currentColumn']}{row}")
+                if friday_serial is None or current_slaughter is not None:
+                    continue
+                friday = _excel_serial_to_date(friday_serial)
+                report_date = friday + timedelta(days=5)
+                if report_date <= today:
+                    pending.append({**config, "row": row, "reportDate": report_date.isoformat()})
+    return pending
 
 
 def write_market_data_to_template(
@@ -76,6 +96,39 @@ def _run_template_script(*arguments: str) -> str:
     except (OSError, subprocess.SubprocessError) as error:
         raise RuntimeError(f"엑셀 양식을 처리하지 못했습니다. ({error})") from error
     return completed.stdout
+
+
+def _find_sheet_paths(archive: ZipFile) -> dict[str, str]:
+    """xlsx 내부에서 시트 이름과 worksheet XML 경로를 연결합니다."""
+    workbook = ElementTree.fromstring(archive.read("xl/workbook.xml"))
+    relationships = ElementTree.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+    targets = {
+        item.get("Id"): item.get("Target")
+        for item in relationships.findall(f"{{{PACKAGE_RELATIONSHIP_NAMESPACE}}}Relationship")
+    }
+    paths: dict[str, str] = {}
+    for sheet in workbook.findall(f"{{{SPREADSHEET_NAMESPACE}}}sheets/{{{SPREADSHEET_NAMESPACE}}}sheet"):
+        relationship_id = sheet.get(f"{{{RELATIONSHIP_NAMESPACE}}}id")
+        target = targets.get(relationship_id)
+        if target is None:
+            continue
+        paths[sheet.get("name")] = target.lstrip("/") if target.startswith("/") else f"xl/{target}"
+    return paths
+
+
+def _read_sheet_cell_values(archive: ZipFile, sheet_path: str) -> dict[str, str]:
+    """대상 범위 확인에 필요한 셀 값만 worksheet XML에서 읽습니다."""
+    worksheet = ElementTree.fromstring(archive.read(sheet_path))
+    values: dict[str, str] = {}
+    for cell in worksheet.findall(f".//{{{SPREADSHEET_NAMESPACE}}}c"):
+        value = cell.find(f"{{{SPREADSHEET_NAMESPACE}}}v")
+        if value is not None and value.text is not None:
+            values[cell.get("r")] = value.text
+    return values
+
+
+def _excel_serial_to_date(value: str) -> date:
+    return (datetime(1899, 12, 30) + timedelta(days=float(value))).date()
 
 
 def _set_opening_view(output_path: Path) -> None:

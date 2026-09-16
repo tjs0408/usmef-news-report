@@ -3,57 +3,136 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="USMEF Korea 주간 해외 동향 Excel 보고서 생성 도구">
+  <meta name="description" content="주간 해외 동향 리포트 Excel 보고서 생성 도구">
   <title>주간 해외 동향 리포트</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <main class="page-shell">
-    <section class="report-card" aria-labelledby="page-title">
-      <p class="eyebrow">U.S. MEAT EXPORT FEDERATION</p>
-      <h1 id="page-title">주간 해외 동향 리포트</h1>
-      <p class="description">
-        업로드한 엑셀의 빈 주차 행에 USMEF Korea 뉴스라인의 미국 소·돼지 도축두수와 컷아웃 가격을 채웁니다.
-      </p>
+  <main class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="{{ url_for('index') }}" aria-label="주간 해외 동향 리포트 홈">
+        <span class="brand-mark" aria-hidden="true">W</span>
+        <span><strong>WEEKLY MARKET REPORT</strong><small>해외 축산시장 데이터 관리</small></span>
+      </a>
+      <span class="local-badge">LOCAL WORKSPACE</span>
+    </header>
 
-      <div class="report-details" aria-label="보고서 구성">
-        <div>
-          <span class="detail-label">데이터 원본</span>
-          <strong>USMEF Korea 뉴스라인 · 업로드한 엑셀 양식</strong>
-        </div>
-        <div>
-          <span class="detail-label">파일 형식</span>
-          <strong>Excel (.xlsx)</strong>
-        </div>
-        <div>
-          <span class="detail-label">포함 항목</span>
-          <strong>소·돼지 도축두수 · USDA 수정 · 컷아웃 가격</strong>
-        </div>
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">WEEKLY OVERSEAS MARKET INTELLIGENCE</p>
+        <h1 id="page-title">주간 해외 동향 리포트</h1>
+        <p class="hero-copy">기준 Excel 양식의 최신 주차를 채우고, 같은 값을 한글 보고서의 수급·가격 표까지 이어서 현행화합니다.</p>
+        <ul class="hero-highlights" aria-label="리포트 기능 요약">
+          <li><strong>Excel + 한글</strong><span>표 현행화본 제공</span></li>
+          <li><strong>6개 원본</strong><span>시장 데이터 연동</span></li>
+          <li><strong>기존 값 보존</strong><span>빈 주차만 현행화</span></li>
+        </ul>
+      </div>
+      <div class="hero-status" aria-label="현재 자동화 상태">
+        <span class="status-dot" aria-hidden="true"></span><span>현재 양식 자동화 완료</span><strong>자동 10개 시트</strong>
+      </div>
+    </section>
+
+    <section class="dashboard-grid" aria-label="보고서 생성 대시보드">
+      <div class="dashboard-main">
+        <section class="summary-strip" aria-label="현재 보고서 구성">
+          <article class="automation-overview">
+            <span>현재 자동화</span><strong>10 <em>/ 10</em></strong><small>데이터·그래프 시트</small>
+            <div class="coverage-meter" aria-label="10개 시트 자동화 완료"><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i></div>
+          </article>
+          <article class="source-overview">
+            <span>연동 데이터 원본</span><strong>6개 기관</strong><small>가격·수급·환율 데이터</small>
+            <div class="source-pills" aria-label="연동 데이터 원본 목록"><b>USMEF</b><b>MLA</b><b>AHDB</b><b>JZ</b><b>USDA</b><b>CEPEA</b></div>
+          </article>
+          <article class="refresh-overview"><span>갱신 방식</span><strong>신규 주차·그래프 보정</strong><small>입력값은 유지하고 그래프 공백을 동기화</small><div class="refresh-visual" aria-hidden="true"><i></i><i></i><i></i><span>새 데이터</span></div></article>
+        </section>
+
+        <section class="content-section" aria-labelledby="sheet-title">
+          <div class="section-heading">
+            <div><p class="section-kicker">REPORT WORKSHEETS</p><h2 id="sheet-title">시트별 데이터 현황</h2><p class="section-description">데이터 수집부터 그래프 반영까지 현재 양식의 자동화 범위를 확인할 수 있습니다.</p></div>
+            <span class="legend"><i class="legend-dot active"></i>자동 입력·동기화</span>
+          </div>
+          <div class="sheet-grid">
+            <article class="sheet-card active-sheet">
+              <div class="sheet-card-top"><span class="sheet-icon beef">소</span><span class="sheet-state">자동 입력</span></div>
+              <h3>소-미국</h3><p>도축두수, USDA 수정, 컷아웃 가격, USD 환율 및 원화 환산</p><div class="sheet-source">USMEF Korea 뉴스라인</div>
+            </article>
+            <article class="sheet-card active-sheet">
+              <div class="sheet-card-top"><span class="sheet-icon australia-beef">호</span><span class="sheet-state">자동 입력</span></div>
+              <h3>소-호주</h3><p>주간 소 도축량, EYCI, AUD/KRW 환율 및 원화 환산</p><div class="sheet-source">MLA Statistics API · AUD/KRW 환율</div>
+            </article>
+            <article class="sheet-card active-sheet">
+              <div class="sheet-card-top"><span class="sheet-icon pork">돼지</span><span class="sheet-state">자동 입력</span></div>
+              <h3>돼지-미국</h3><p>도축두수, 수정 전 수치, 컷아웃 가격, USD 환율 및 원화 환산</p><div class="sheet-source">USMEF Korea 뉴스라인</div>
+            </article>
+            <article class="sheet-card active-sheet">
+              <div class="sheet-card-top"><span class="sheet-icon eu">EU</span><span class="sheet-state">자동 입력</span></div>
+              <h3>돼지-EU(독일)</h3><p>독일 지육가격, 유로 환율, 원화 지육가격 및 환산 단가</p><div class="sheet-source">AHDB · EUR/KRW 환율</div>
+            </article>
+            <article class="sheet-card active-sheet">
+              <div class="sheet-card-top"><span class="sheet-icon us-chicken">닭</span><span class="sheet-state">자동 입력</span></div>
+              <h3>닭-미국</h3><p>주간도축량과 WOG Trading by Size의 주간 가중평균 가격(cents/lb)을 날짜별로 입력</p><div class="sheet-source">USDA Market News · Slug ID 3208 · 3646</div>
+            </article>
+            <article class="sheet-card active-sheet">
+              <div class="sheet-card-top"><span class="sheet-icon us-chicken">W</span><span class="sheet-state">자동 동기화</span></div>
+              <h3>미국 육계 그래프(WOG)</h3><p>닭-미국의 WOG 주간 가중평균 가격을 같은 주차 그래프 행에 동기화</p><div class="sheet-source">닭-미국 · USDA Slug ID 3646</div>
+            </article>
+            <article class="sheet-card paused-sheet">
+              <div class="sheet-card-top"><span class="sheet-icon brazil-chicken">브</span><span class="sheet-state">수집 일시 중지</span></div>
+              <h3>닭-브라질</h3><p>CEPEA 봇 탐지 방지를 위해 가격 수집을 잠시 멈춘 상태</p><div class="sheet-source">기존 입력값 유지 · CEPEA 수집 중지</div>
+            </article>
+            <article class="sheet-card paused-sheet">
+              <div class="sheet-card-top"><span class="sheet-icon brazil-chicken">B</span><span class="sheet-state">동기화 중지</span></div>
+              <h3>브라질그래프</h3><p>닭-브라질 수집 재개 전까지 기존 그래프 값을 그대로 유지</p><div class="sheet-source">CEPEA Frango 가격 시리즈 · 중지</div>
+            </article>
+            <article class="sheet-card active-sheet">
+              <div class="sheet-card-top"><span class="sheet-icon us-egg">미</span><span class="sheet-state">자동 입력</span></div>
+              <h3>계란-미국</h3><p>6-Area 주간 재고량, Large 평균가격, USD 환율 및 원화 환산</p><div class="sheet-source">USDA Market News · USD/KRW 환율</div>
+            </article>
+            <article class="sheet-card active-sheet">
+              <div class="sheet-card-top"><span class="sheet-icon japan-egg">일</span><span class="sheet-state">자동 입력</span></div>
+              <h3>계란-일본</h3><p>도쿄 M란 기준치, JPY 환율 및 원화 환산 가격</p><div class="sheet-source">JA 전농타마고 · JPY/KRW 환율</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="content-section workflow" aria-labelledby="workflow-title">
+          <div class="section-heading compact"><div><p class="section-kicker">WEEKLY WORKFLOW</p><h2 id="workflow-title">보고서 생성 흐름</h2></div></div>
+          <ol class="workflow-list">
+            <li><span>01</span><div><strong>기준 양식 업로드</strong><p>지난주에 완성한 파일 또는 기준 양식을 선택합니다.</p></div></li>
+            <li><span>02</span><div><strong>신규 주차 및 그래프 데이터 수집</strong><p>빈 주차를 채우고, 연결된 그래프의 누락값도 함께 동기화합니다.</p></div></li>
+            <li><span>03</span><div><strong>완성본 다운로드</strong><p>현행화된 Excel과 한글 표 현행화본을 각각 받습니다.</p></div></li>
+          </ol>
+        </section>
       </div>
 
-      <form id="report-form" action="{{ url_for('start_report') }}" method="post" enctype="multipart/form-data">
-        <label class="upload-field" for="template-file">
-          <span class="detail-label">기준 Excel 파일</span>
-          <input id="template-file" name="template_file" type="file" accept=".xlsx" required>
-        </label>
-        <button id="generate-button" type="submit">
-          <span class="button-label">보고서 생성 및 다운로드</span>
-          <span class="button-loading" aria-hidden="true">뉴스라인을 분석하고 있습니다…</span>
-        </button>
-      </form>
-      <section id="progress-panel" class="progress-panel" hidden aria-live="polite">
-        <div class="progress-heading">
-          <strong id="progress-message">보고서 생성 준비 중</strong>
-          <span id="progress-percent">0%</span>
+      <aside class="generate-panel" aria-labelledby="generate-title">
+        <div class="panel-heading">
+          <p class="section-kicker">CREATE REPORT</p><h2 id="generate-title">이번 주 보고서 생성</h2>
+        <p>지난주 완성본을 올리면 최신 빈 주차를 채운 뒤, 동일 주차의 한글 보고서 표 8개도 함께 갱신합니다.</p>
         </div>
-        <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-          <div id="progress-bar" class="progress-bar"></div>
-        </div>
-        <p id="elapsed-time" class="elapsed-time">경과 시간 0초</p>
-      </section>
-      <p id="status-message" class="status-message" aria-live="polite">
-        마지막으로 받은 보고서를 업로드하면, 이미 채워진 주차는 건너뛰고 새 주차만 반영합니다.
-      </p>
+        <form id="report-form" action="{{ url_for('start_report') }}" method="post" enctype="multipart/form-data">
+          <label class="upload-field" for="template-file">
+            <span class="upload-icon" aria-hidden="true">↑</span>
+            <span class="upload-copy"><strong>기준 Excel 파일 선택</strong><small>.xlsx 형식 · 지난주 완성본 사용 가능</small></span>
+            <input id="template-file" name="template_file" type="file" accept=".xlsx" required>
+          </label>
+          <p id="selected-file" class="selected-file" aria-live="polite">선택된 파일이 없습니다.</p>
+          <button id="generate-button" type="submit"><span class="button-label">보고서 생성</span><span class="button-loading" aria-hidden="true">뉴스라인 분석 중…</span><span class="button-arrow" aria-hidden="true">→</span></button>
+        </form>
+        <section id="progress-panel" class="progress-panel" hidden aria-live="polite">
+          <div class="progress-heading"><strong id="progress-message">보고서 생성 준비 중</strong><span id="progress-percent">0%</span></div>
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-bar" class="progress-bar"></div></div>
+          <p id="elapsed-time" class="elapsed-time">경과 시간 0초</p>
+        </section>
+        <section id="download-actions" class="download-actions" hidden aria-live="polite">
+          <div><strong>생성 파일</strong><span id="download-summary">원하는 파일을 선택해 내려받으세요.</span></div>
+          <a id="excel-download" class="download-action excel-download" href="#">Excel 현행화본 다운로드 <span aria-hidden="true">↓</span></a>
+          <a id="hwp-download" class="download-action hwp-download" href="#" hidden>한글 보고서 현행화본 다운로드 <span aria-hidden="true">↓</span></a>
+        </section>
+        <p id="status-message" class="status-message" aria-live="polite">.xlsx 기준 파일을 선택한 뒤 생성 버튼을 눌러 주세요.</p>
+        <div class="panel-note"><strong>안내</strong><span>한글 보고서는 표 데이터·제목 날짜와 미국산 지육가격 그래프를 함께 현행화한 HWPX 파일로 제공합니다.</span></div>
+      </aside>
     </section>
   </main>
 
@@ -67,56 +146,61 @@
     const progressTrack = document.querySelector(".progress-track");
     const progressBar = document.getElementById("progress-bar");
     const elapsedTime = document.getElementById("elapsed-time");
+    const templateFile = document.getElementById("template-file");
+    const selectedFile = document.getElementById("selected-file");
+    const downloadActions = document.getElementById("download-actions");
+    const excelDownload = document.getElementById("excel-download");
+    const hwpDownload = document.getElementById("hwp-download");
+    const downloadSummary = document.getElementById("download-summary");
 
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      button.disabled = true;
-      button.classList.add("is-loading");
-      progressPanel.hidden = false;
-      status.textContent = "서버에서 보고서 생성을 시작하고 있습니다.";
-      const startedAt = Date.now();
-      const elapsedTimer = window.setInterval(() => {
-        const seconds = Math.floor((Date.now() - startedAt) / 1000);
-        elapsedTime.textContent = `경과 시간 ${seconds}초`;
-      }, 1000);
-
-      try {
-        const response = await fetch(form.action, { method: "POST", body: new FormData(form) });
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          throw new Error(error.error || "보고서 생성 작업을 시작하지 못했습니다.");
-        }
-        const { jobId } = await response.json();
-        await waitForReport(jobId);
-      } catch (error) {
-        status.textContent = `보고서 생성에 실패했습니다: ${error.message}`;
-      } finally {
-        window.clearInterval(elapsedTimer);
-        button.disabled = false;
-        button.classList.remove("is-loading");
-      }
+    templateFile.addEventListener("change", () => {
+      const file = templateFile.files[0];
+      selectedFile.textContent = file ? `선택됨 · ${file.name}` : "선택된 파일이 없습니다.";
+      selectedFile.classList.toggle("has-file", Boolean(file));
     });
 
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault(); button.disabled = true; button.classList.add("is-loading"); progressPanel.hidden = false;
+      downloadActions.hidden = true;
+      hwpDownload.hidden = true;
+      progressMessage.textContent = "데이터 확인을 시작하고 있습니다.";
+      progressPercent.textContent = "0%";
+      progressBar.style.width = "0%";
+      progressTrack.setAttribute("aria-valuenow", "0");
+      elapsedTime.textContent = "경과 시간 0초";
+      status.textContent = "서버에서 보고서 생성을 시작하고 있습니다.";
+      const startedAt = Date.now();
+      const elapsedTimer = window.setInterval(() => { elapsedTime.textContent = `경과 시간 ${Math.floor((Date.now() - startedAt) / 1000)}초`; }, 1000);
+      try {
+        const response = await fetch(form.action, { method: "POST", body: new FormData(form) });
+        if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.error || "보고서 생성 작업을 시작하지 못했습니다."); }
+        const { jobId } = await response.json(); await waitForReport(jobId);
+      } catch (error) { status.textContent = `보고서 생성에 실패했습니다: ${error.message}`; }
+      finally { window.clearInterval(elapsedTimer); button.disabled = false; button.classList.remove("is-loading"); }
+    });
     async function waitForReport(jobId) {
       while (true) {
-        const response = await fetch(`/report-status/${jobId}`);
-        const job = await response.json();
+        const response = await fetch(`/report-status/${jobId}`); const job = await response.json();
         if (!response.ok) throw new Error(job.error || "진행 상태를 불러오지 못했습니다.");
-
-        const progress = Number(job.progress || 0);
-        progressMessage.textContent = job.message;
-        progressPercent.textContent = `${progress}%`;
-        progressBar.style.width = `${progress}%`;
-        progressTrack.setAttribute("aria-valuenow", String(progress));
-
-        if (job.status === "completed") {
-          window.location.assign(`/download-report/${jobId}`);
-          status.textContent = "다운로드를 시작했습니다. 다음 보고서를 생성할 수 있습니다.";
-          return;
-        }
+        const progress = Number(job.progress || 0); progressMessage.textContent = job.message; progressPercent.textContent = `${progress}%`; progressBar.style.width = `${progress}%`; progressTrack.setAttribute("aria-valuenow", String(progress));
+        if (job.status === "completed") { showDownloadActions(jobId, job); return; }
         if (job.status === "failed") throw new Error(job.message);
         await new Promise((resolve) => window.setTimeout(resolve, 1200));
       }
+    }
+    function showDownloadActions(jobId, job) {
+      excelDownload.href = `/download-report/${jobId}/excel`;
+      hwpDownload.hidden = !job.hwpPath;
+      if (job.hwpPath) {
+        hwpDownload.href = `/download-report/${jobId}/hwp`;
+        const reportDate = job.hwpReportDate ? ` · 표 기준 ${job.hwpReportDate}` : "";
+        downloadSummary.textContent = `Excel과 그래프를 포함한 한글 보고서 현행화본이 준비되었습니다${reportDate}.`;
+        status.textContent = "생성이 완료되었습니다. 필요한 파일을 선택해 다운로드해 주세요.";
+      } else {
+        downloadSummary.textContent = "Excel 현행화본이 준비되었습니다. 한글 보고서 현행화본은 이번 실행에서 만들지 못했습니다.";
+        status.textContent = job.hwpWarning || "Excel 보고서 생성이 완료되었습니다.";
+      }
+      downloadActions.hidden = false;
     }
   </script>
 </body>

@@ -4,14 +4,19 @@ __pycache__/
 .venv/
 work/*
 !work/template_report.mjs
-report_template/*.xlsx
+!work/update_report_excel.ps1
+!work/update_hwp_table_report.ps1
+!work/export_excel_chart.ps1
 
 # Generated reports
-output/*.xlsx
-output/*.inspect.ndjson
-output/*.pending.json
-output/*.market-data.json
+output/*
 !output/.gitkeep
+
+# Local validation artifacts
+outputs/
+tmp/
+.build/
+.codex-finalizer/
 
 # Local environment files
 .env

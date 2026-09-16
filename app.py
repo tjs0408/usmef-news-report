@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import os
 from pathlib import Path
 import tempfile
@@ -13,19 +13,38 @@ from flask import Flask, jsonify, redirect, render_template, request, send_file,
 
 from src.crawler import (
     fetch_ahdb_germany_pig_prices,
+    fetch_aud_krw_exchange_rates,
+    fetch_brl_krw_exchange_rates,
+    fetch_cepea_brazil_chicken_prices,
+    fetch_cepea_brazil_chicken_prices_for_period,
     fetch_eur_krw_exchange_rates,
+    fetch_jpy_krw_exchange_rates,
+    fetch_jz_tokyo_egg_prices,
     fetch_market_data_for_report_dates,
+    fetch_mla_australia_cattle_data,
+    fetch_usda_us_chicken_data,
+    fetch_usda_us_egg_data,
     fetch_usd_krw_exchange_rates,
 )
 from src.template_report import (
+    find_pending_brazil_chicken_rows,
+    find_pending_australia_beef_rows,
     find_pending_eu_germany_rows,
+    find_pending_japan_egg_rows,
     find_pending_report_dates,
+    find_pending_us_chicken_rows,
+    find_pending_us_egg_rows,
     write_market_data_to_template,
 )
+from src.hwp_report import HwpReportError
+from src.hwpx_report import write_hwpx_table_report
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 OUTPUT_DIR = PROJECT_ROOT / "output"
+# CEPEA가 봇 탐지로 접속을 제한하는 동안에는 가격 시리즈 요청을 보내지 않는다.
+# 재개 시 True로 변경하면 닭-브라질 및 브라질그래프 수집을 다시 수행한다.
+CEPEA_COLLECTION_ENABLED = False
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
@@ -78,19 +97,41 @@ def report_status(job_id: str):
 
 @app.get("/download-report/<job_id>")
 def download_report(job_id: str):
-    """완료된 보고서 파일을 내려줍니다."""
+    """기존 링크 호환을 위해 Excel 보고서를 내려줍니다."""
+    return _download_report_artifact(job_id, "excel")
+
+
+@app.get("/download-report/<job_id>/<artifact>")
+def download_report_artifact(job_id: str, artifact: str):
+    """완료된 Excel 또는 한글 표 현행화본을 내려줍니다."""
+    return _download_report_artifact(job_id, artifact)
+
+
+def _download_report_artifact(job_id: str, artifact: str):
     with REPORT_JOBS_LOCK:
         job = REPORT_JOBS.get(job_id)
         if job is None or job.get("status") != "completed":
             return "아직 보고서 생성이 완료되지 않았습니다.", 409
-        report_path = Path(str(job["reportPath"]))
-        report_filename = str(job["reportFilename"])
+        artifact_details = {
+            "excel": ("reportPath", "reportFilename", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            "hwp": ("hwpPath", "hwpFilename", "application/vnd.hancom.hwpx"),
+        }.get(artifact)
+        if artifact_details is None:
+            return "지원하지 않는 다운로드 파일입니다.", 404
+        path_key, filename_key, mimetype = artifact_details
+        if not job.get(path_key) or not job.get(filename_key):
+            return "요청한 파일을 만들지 못했습니다.", 404
+        report_path = Path(str(job[path_key]))
+        report_filename = str(job[filename_key])
+
+    if not report_path.is_file():
+        return "요청한 파일을 찾지 못했습니다.", 404
 
     return send_file(
         report_path,
         as_attachment=True,
         download_name=report_filename,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        mimetype=mimetype,
     )
 
 
@@ -99,18 +140,61 @@ def _run_report_job(job_id: str, template_path: Path) -> None:
     try:
         market_pending_rows = find_pending_report_dates(template_path, date.today())
         eu_germany_rows = find_pending_eu_germany_rows(template_path, date.today())
-        if not market_pending_rows and not eu_germany_rows:
-            raise RuntimeError("현재 양식에서 현행화할 주차가 없습니다.")
+        japan_egg_rows = find_pending_japan_egg_rows(template_path, date.today())
+        us_egg_rows = find_pending_us_egg_rows(template_path, date.today())
+        brazil_chicken_rows = find_pending_brazil_chicken_rows(template_path, date.today())
+        us_chicken_rows = find_pending_us_chicken_rows(template_path, date.today())
+        australia_beef_rows = find_pending_australia_beef_rows(template_path, date.today())
+        has_pending_rows = any(
+            (
+                market_pending_rows,
+                eu_germany_rows,
+                japan_egg_rows,
+                us_egg_rows,
+                brazil_chicken_rows,
+                us_chicken_rows,
+                australia_beef_rows,
+            )
+        )
+        if not has_pending_rows:
+            # 이미 현행화된 Excel도 외부 사이트를 다시 조회하지 않고 다시
+            # 저장한다. 이때 표의 표시 단위 기준 비교율·한글 표를 최신 로직으로
+            # 반영할 수 있다.
+            _update_job(
+                job_id,
+                progress=18,
+                message="새로 수집할 빈 주차는 없습니다. 업로드된 Excel의 비교율과 한글 표를 최신 기준으로 정리하고 있습니다.",
+            )
+            created_at = datetime.now().strftime("%Y%m%d_%H%M%S")
+            report_filename = f"해외시장_수급_및_가격_동향_{created_at}.xlsx"
+            report_path = OUTPUT_DIR / report_filename
+            write_market_data_to_template(
+                template_path,
+                report_path,
+                pending_rows=(),
+                market_data=(),
+                exchange_rates={},
+            )
+            _complete_job_with_hwp(job_id, report_path, report_filename, created_at)
+            return
         report_dates = {date.fromisoformat(str(row["reportDate"])) for row in market_pending_rows}
         _update_job(
             job_id,
-            progress=15,
-            message=f"USMEF 뉴스 {len(report_dates)}건, AHDB 독일 가격 대상 {len(eu_germany_rows)}건을 찾았습니다.",
+            progress=10,
+            message=(
+                f"USMEF 뉴스 {len(report_dates)}건, AHDB 독일 가격 대상 {len(eu_germany_rows)}건, "
+                f"일본 계란 가격 대상 {len(japan_egg_rows)}건, 미국 계란 가격 대상 {len(us_egg_rows)}건, "
+                f"브라질 닭고기 가격 대상 {len(brazil_chicken_rows)}건, 미국 닭고기 가격 대상 {len(us_chicken_rows)}건, "
+                f"호주 소고기 대상 {len(australia_beef_rows)}건을 찾았습니다."
+            ),
         )
 
         def update_ocr_progress(index: int, total: int, report_date: date, stage: str) -> None:
             completed_count = index - 1 if stage == "started" else index
-            progress = 20 + round(completed_count / total * 50)
+            # USMEF 분석은 전체 작업의 한 단계입니다. 이후에도 AHDB, USDA,
+            # MLA, CEPEA, 환율 조회와 Excel 저장이 이어지므로 여기서 70%까지
+            # 올라가지 않도록 실제 작업 비중에 맞춰 12~35% 구간만 사용합니다.
+            progress = 12 + round(completed_count / total * 23)
             message = (
                 f"뉴스라인 {index}/{total}건을 분석하고 있습니다. ({report_date:%Y-%m-%d})"
                 if stage == "started"
@@ -123,15 +207,117 @@ def _run_report_job(job_id: str, template_path: Path) -> None:
             )
 
         market_data = fetch_market_data_for_report_dates(report_dates, update_ocr_progress) if report_dates else []
-        _update_job(job_id, progress=72, message="AHDB 독일 돼지고기 가격을 확인하고 있습니다.")
+        available_market_dates = {item["구분"] for item in market_data}
+        market_pending_rows = [
+            row
+            for row in market_pending_rows
+            if date.fromisoformat(str(row["reportDate"])) in available_market_dates
+        ]
+        _update_job(job_id, progress=35, message="AHDB 독일 돼지고기 가격을 확인하고 있습니다.")
         eu_germany_dates = {date.fromisoformat(str(row["weekEnded"])) for row in eu_germany_rows}
         eu_germany_prices = fetch_ahdb_germany_pig_prices(eu_germany_dates)
-        _update_job(job_id, progress=74, message="날짜별 USD/KRW·EUR/KRW 매매기준율을 확인하고 있습니다.")
+        _update_job(job_id, progress=42, message="JA 전농타마고의 도쿄 M란 기준치를 확인하고 있습니다.")
+        japan_egg_dates = {date.fromisoformat(str(row["priceDate"])) for row in japan_egg_rows}
+        japan_egg_prices = fetch_jz_tokyo_egg_prices(japan_egg_dates)
+        japan_egg_rows = [
+            row
+            for row in japan_egg_rows
+            if date.fromisoformat(str(row["priceDate"])) in japan_egg_prices
+        ]
+        _update_job(job_id, progress=49, message="USDA 미국 계란의 주간 재고량과 Large 평균가격을 확인하고 있습니다.")
+        us_egg_dates = {date.fromisoformat(str(row["weekEnded"])) for row in us_egg_rows}
+        us_egg_data = fetch_usda_us_egg_data(us_egg_dates)
+        unpublished_us_egg_dates = us_egg_dates - set(us_egg_data)
+        us_egg_rows = [
+            row
+            for row in us_egg_rows
+            if date.fromisoformat(str(row["weekEnded"])) in us_egg_data
+        ]
+        if unpublished_us_egg_dates:
+            deferred_dates = ", ".join(item.isoformat() for item in sorted(unpublished_us_egg_dates))
+            _update_job(job_id, progress=55, message=f"USDA 미국 계란 가격 보고서가 아직 게시되지 않아 이번 실행에서는 건너뜁니다. ({deferred_dates})")
+        _update_job(job_id, progress=56, message="USDA 미국 닭고기 WOG 주간 가중평균 가격을 확인하고 있습니다.")
+        us_chicken_dates = {date.fromisoformat(str(row["weekEnded"])) for row in us_chicken_rows}
+        us_chicken_prices = fetch_usda_us_chicken_data(us_chicken_dates)
+        us_chicken_rows = [
+            row
+            for row in us_chicken_rows
+            if date.fromisoformat(str(row["weekEnded"])) in us_chicken_prices
+        ]
+        _update_job(job_id, progress=63, message="MLA 호주 소고기 주간 도축량과 EYCI를 확인하고 있습니다.")
+        australia_beef_dates = {date.fromisoformat(str(row["weekEnded"])) for row in australia_beef_rows}
+        australia_beef_data = fetch_mla_australia_cattle_data(australia_beef_dates)
+        australia_beef_rows = [
+            row
+            for row in australia_beef_rows
+            if date.fromisoformat(str(row["weekEnded"])) in australia_beef_data
+        ]
+        if CEPEA_COLLECTION_ENABLED:
+            _update_job(job_id, progress=73, message="CEPEA 브라질 닭고기 가격 시리즈의 À vista R$ 값을 확인하고 있습니다.")
+            brazil_chicken_dates = {date.fromisoformat(str(row["weekEnded"])) for row in brazil_chicken_rows}
+            current_month_start = date.today().replace(day=1)
+            previous_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
+            try:
+                brazil_chicken_prices = fetch_cepea_brazil_chicken_prices(brazil_chicken_dates)
+                brazil_chicken_rows = [
+                    row
+                    for row in brazil_chicken_rows
+                    if date.fromisoformat(str(row["weekEnded"])) in brazil_chicken_prices
+                ]
+                brazil_chicken_graph_prices = fetch_cepea_brazil_chicken_prices_for_period(previous_month_start, date.today())
+            except RuntimeError:
+                # CEPEA의 봇 방지·일시 장애로 가격 파일에 접근하지 못해도 다른
+                # 국가 보고서는 생성한다. 브라질 빈칸은 다음 실행에서 재시도된다.
+                brazil_chicken_prices = {}
+                brazil_chicken_rows = []
+                brazil_chicken_graph_prices = {}
+                _update_job(
+                    job_id,
+                    progress=82,
+                    message="CEPEA 브라질 가격 사이트에 접속하지 못해 이번 실행에서는 브라질 값만 건너뜁니다.",
+                )
+        else:
+            brazil_chicken_prices = {}
+            brazil_chicken_rows = []
+            brazil_chicken_graph_prices = {}
+            _update_job(
+                job_id,
+                progress=82,
+                message="CEPEA 브라질 닭고기 수집은 봇 탐지 방지를 위해 일시 중지되어 있습니다.",
+            )
+        _update_job(job_id, progress=83, message="날짜별 USD/KRW·EUR/KRW·JPY/KRW·BRL/KRW 매매기준율을 확인하고 있습니다.")
         exchange_dates = {date.fromisoformat(str(row["exchangeDate"])) for row in market_pending_rows}
+        exchange_dates.update(date.fromisoformat(str(row["exchangeDate"])) for row in us_egg_rows)
         exchange_rates = fetch_usd_krw_exchange_rates(exchange_dates)
+        market_pending_rows = [
+            row
+            for row in market_pending_rows
+            if date.fromisoformat(str(row["exchangeDate"])) in exchange_rates
+        ]
+        us_egg_rows = [
+            row
+            for row in us_egg_rows
+            if date.fromisoformat(str(row["exchangeDate"])) in exchange_rates
+        ]
         euro_exchange_dates = {date.fromisoformat(str(row["euroExchangeDate"])) for row in eu_germany_rows}
         eur_exchange_rates = fetch_eur_krw_exchange_rates(euro_exchange_dates)
-        _update_job(job_id, progress=76, message="수집한 값과 환율을 엑셀 양식에 입력하고 있습니다.")
+        japan_egg_exchange_dates = {date.fromisoformat(str(row["exchangeDate"])) for row in japan_egg_rows}
+        jpy_exchange_rates = fetch_jpy_krw_exchange_rates(japan_egg_exchange_dates)
+        japan_egg_rows = [
+            row
+            for row in japan_egg_rows
+            if date.fromisoformat(str(row["exchangeDate"])) in jpy_exchange_rates
+        ]
+        brazil_chicken_exchange_dates = {date.fromisoformat(str(row["exchangeDate"])) for row in brazil_chicken_rows}
+        brl_exchange_rates = fetch_brl_krw_exchange_rates(brazil_chicken_exchange_dates)
+        brazil_chicken_rows = [
+            row
+            for row in brazil_chicken_rows
+            if date.fromisoformat(str(row["exchangeDate"])) in brl_exchange_rates
+        ]
+        australia_beef_exchange_dates = {date.fromisoformat(str(row["exchangeDate"])) for row in australia_beef_rows}
+        aud_exchange_rates = fetch_aud_krw_exchange_rates(australia_beef_exchange_dates)
+        _update_job(job_id, progress=91, message="수집한 값과 환율을 엑셀 양식에 입력하고 있습니다.")
         created_at = datetime.now().strftime("%Y%m%d_%H%M%S")
         report_filename = f"해외시장_수급_및_가격_동향_{created_at}.xlsx"
         report_path = OUTPUT_DIR / report_filename
@@ -144,20 +330,61 @@ def _run_report_job(job_id: str, template_path: Path) -> None:
             eu_germany_rows,
             eu_germany_prices,
             eur_exchange_rates,
+            japan_egg_rows,
+            japan_egg_prices,
+            jpy_exchange_rates,
+            us_egg_rows,
+            us_egg_data,
+            brazil_chicken_rows,
+            brazil_chicken_prices,
+            brl_exchange_rates,
+            us_chicken_rows,
+            us_chicken_prices,
+            australia_beef_rows,
+            australia_beef_data,
+            aud_exchange_rates,
+            brazil_chicken_graph_prices,
         )
-        _update_job(
-            job_id,
-            status="completed",
-            progress=100,
-            message="보고서 생성이 완료되었습니다. 다운로드를 시작합니다.",
-            reportPath=str(report_path),
-            reportFilename=report_filename,
-        )
+        _complete_job_with_hwp(job_id, report_path, report_filename, created_at)
     except RuntimeError as error:
         app.logger.exception("USMEF 뉴스라인 보고서 생성 실패")
         _update_job(job_id, status="failed", progress=0, message=f"보고서 생성에 실패했습니다: {error}")
     finally:
         template_path.unlink(missing_ok=True)
+
+
+def _complete_job_with_hwp(job_id: str, report_path: Path, report_filename: str, created_at: str) -> None:
+    """Excel 생성 완료 후 HWPX 보고서의 표·그래프를 함께 현행화합니다."""
+    _update_job(job_id, progress=96, message="현행화된 Excel 값과 USDA 미국산 지육가격 그래프를 한글 보고서에 반영하고 있습니다.")
+    hwp_filename = f"주간_해외_수급_및_가격_동향_표현행화_{created_at}.hwpx"
+    hwp_path = OUTPUT_DIR / hwp_filename
+    try:
+        hwp_payload = write_hwpx_table_report(report_path, hwp_path)
+    except HwpReportError as error:
+        # 한글 보고서 생성에 실패해도 Excel 다운로드는 유지한다.
+        app.logger.warning("한글 HWPX 현행화본 생성 실패: %s", error)
+        _update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            message="Excel 보고서는 생성됐지만 한글 HWPX 현행화본은 만들지 못했습니다.",
+            reportPath=str(report_path),
+            reportFilename=report_filename,
+            hwpWarning=str(error),
+        )
+        return
+
+    _update_job(
+        job_id,
+        status="completed",
+        progress=100,
+        message="Excel 보고서와 표·USDA 그래프가 현행화된 한글 HWPX 보고서가 준비되었습니다.",
+        reportPath=str(report_path),
+        reportFilename=report_filename,
+        hwpPath=str(hwp_path),
+        hwpFilename=hwp_filename,
+        hwpReportDate=str(hwp_payload["reportDate"]),
+    )
 
 
 def _update_job(job_id: str, **changes: object) -> None:

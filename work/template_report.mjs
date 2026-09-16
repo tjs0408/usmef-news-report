@@ -67,8 +67,6 @@ if (mode === "pending") {
       sheet.getRange(`${item.kgPriceColumn}${item.row}`).formulas = [[`=ROUND(${item.currentColumn}${item.row}/100,2)`]];
       sheet.getRange(`${item.wonPriceColumn}${item.row}`).formulas = [[`=${item.currentColumn}${item.row}*${item.exchangeColumn}${item.row}`]];
       sheet.getRange(`${item.wonKgPriceColumn}${item.row}`).formulas = [[`=${item.wonPriceColumn}${item.row}/100`]];
-      sheet.getRange(`${item.kgPriceColumn}${item.row}`).format.numberFormat = "0.00";
-      sheet.getRange(`${item.wonPriceColumn}${item.row}:${item.wonKgPriceColumn}${item.row}`).format.numberFormat = "#,##0";
       continue;
     }
     const data = dataByDate.get(item.reportDate);
@@ -80,12 +78,18 @@ if (mode === "pending") {
       : [data.slaughterCount, data.previousSlaughterCount, data.cutoutPrice];
 
     if (!isPork) {
-      const previousWeekSlaughterCount = sheet.getRange(`${item.currentColumn}${item.row - 1}`).values[0][0];
       sheet.getRange(`${item.currentColumn}${item.row}:${item.priceColumn}${item.row}`).values = [[
         slaughterCount,
-        previousSlaughterCount === previousWeekSlaughterCount ? null : previousSlaughterCount,
+        null,
         cutoutPrice,
       ]];
+      // 소-미국의 ER은 "USDA 수정 후" 값이다. 이번 뉴스가 알려 주는 전 주
+      // 도축두수는 직전 행의 EQ와 비교하여 다를 때 직전 행 ER에 기록한다.
+      const previousRow = item.row - 1;
+      const recordedPreviousSlaughterCount = sheet.getRange(`${item.currentColumn}${previousRow}`).values[0][0];
+      if (previousSlaughterCount !== null && previousSlaughterCount !== recordedPreviousSlaughterCount) {
+        sheet.getRange(`${item.revisionColumn}${previousRow}`).values = [[previousSlaughterCount]];
+      }
       writeKgPrice(sheet, item);
       continue;
     }

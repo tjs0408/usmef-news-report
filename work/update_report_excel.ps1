@@ -563,30 +563,37 @@ try {
         $comparisonColumns = @($targetBlockStartColumn + 5)
         $comparisonColumns += ($targetBlockStartColumn + 6)
         foreach ($comparisonColumn in $comparisonColumns) {
-            # 이전 실행에서 남았을 수 있는 넓은 조건부 서식을 해당 주차 블록만
-            # 제거한 뒤, 실제 퍼센트 데이터 행에만 다시 건다.
-            $blockComparisonRange = $formatTarget.sheet.Range(
-                $formatTarget.sheet.Cells.Item([int]$formatTarget.clearTopRow, $comparisonColumn),
-                $formatTarget.sheet.Cells.Item([int]$formatTarget.clearBottomRow, $comparisonColumn)
-            )
-            $blockComparisonRange.FormatConditions.Delete()
-            # 제목 행은 조건부 서식에서 제외해야 텍스트가 양수로 판정되어
-            # 빨강으로 보이는 문제를 막을 수 있다.
-            foreach ($headerRow in $formatTarget.headerRows) {
-                $headerCell = $formatTarget.sheet.Cells.Item([int]$headerRow, $comparisonColumn)
-                $headerCell.FormatConditions.Delete()
-                $headerCell.Font.Color = 0
+            try {
+                # 이전 실행에서 남았을 수 있는 넓은 조건부 서식을 해당 주차 블록만
+                # 제거한 뒤, 실제 퍼센트 데이터 행에만 다시 건다.
+                $blockComparisonRange = $formatTarget.sheet.Range(
+                    $formatTarget.sheet.Cells.Item([int]$formatTarget.clearTopRow, $comparisonColumn),
+                    $formatTarget.sheet.Cells.Item([int]$formatTarget.clearBottomRow, $comparisonColumn)
+                )
+                $blockComparisonRange.FormatConditions.Delete()
+                # 제목 행은 조건부 서식에서 제외해야 텍스트가 양수로 판정되어
+                # 빨강으로 보이는 문제를 막을 수 있다.
+                foreach ($headerRow in $formatTarget.headerRows) {
+                    $headerCell = $formatTarget.sheet.Cells.Item([int]$headerRow, $comparisonColumn)
+                    $headerCell.FormatConditions.Delete()
+                    $headerCell.Font.Color = 0
+                }
+                foreach ($comparisonRow in $formatTarget.comparisonRows) {
+                    $comparisonCell = $formatTarget.sheet.Cells.Item([int]$comparisonRow, $comparisonColumn)
+                    $comparisonCell.Font.Color = 0
+                    $positiveRule = $comparisonCell.FormatConditions.Add($xlCellValue, $xlGreater, '0')
+                    # 양식에서 기존에 쓰던 기본 빨강·파랑 색상값을 그대로 사용한다.
+                    $positiveRule.Font.Color = 255
+                    $negativeRule = $comparisonCell.FormatConditions.Add($xlCellValue, $xlLess, '0')
+                    $negativeRule.Font.Color = 16711680
+                    $sameRule = $comparisonCell.FormatConditions.Add($xlCellValue, $xlEqual, '0')
+                    $sameRule.Font.Color = 0
+                }
             }
-            foreach ($comparisonRow in $formatTarget.comparisonRows) {
-                $comparisonCell = $formatTarget.sheet.Cells.Item([int]$comparisonRow, $comparisonColumn)
-                $comparisonCell.Font.Color = 0
-                $positiveRule = $comparisonCell.FormatConditions.Add($xlCellValue, $xlGreater, '0')
-                # 양식에서 기존에 쓰던 기본 빨강·파랑 색상값을 그대로 사용한다.
-                $positiveRule.Font.Color = 255
-                $negativeRule = $comparisonCell.FormatConditions.Add($xlCellValue, $xlLess, '0')
-                $negativeRule.Font.Color = 16711680
-                $sameRule = $comparisonCell.FormatConditions.Add($xlCellValue, $xlEqual, '0')
-                $sameRule.Font.Color = 0
+            catch {
+                # 조건부 서식은 표시 보조 기능이다. 특정 양식의 병합 셀·기존 서식
+                # 충돌로 실패해도 수집값·산식·보고서 저장은 중단하지 않는다.
+                Write-Warning "비교율 색상 서식을 적용하지 못했습니다. sheet=$($formatTarget.sheet.Name), column=$comparisonColumn"
             }
         }
     }

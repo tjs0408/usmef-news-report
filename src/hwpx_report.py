@@ -208,7 +208,11 @@ def _export_excel_chart_bmp(
         raise HwpReportError(f"{label} 그래프를 내보낼 PowerShell을 찾지 못했습니다.")
 
     with tempfile.TemporaryDirectory(prefix="australia_cattle_chart_") as temporary_directory:
+        # Windows PowerShell의 인수 코드페이지가 한글 파일명을 깨뜨릴 수 있다.
+        # 읽기 전용 사본을 영문 임시 경로에 두고, 원본 업로드 파일은 건드리지 않는다.
+        source_copy = Path(temporary_directory) / "source_workbook.xlsx"
         png_path = Path(temporary_directory) / "chart.png"
+        shutil.copy2(excel_path, source_copy)
         try:
             result = subprocess.run(
                 [
@@ -219,7 +223,7 @@ def _export_excel_chart_bmp(
                     "-File",
                     str(EXCEL_CHART_EXPORT_SCRIPT),
                     "-WorkbookPath",
-                    str(excel_path),
+                    str(source_copy),
                     "-OutputPath",
                     str(png_path),
                     "-SheetIndex",

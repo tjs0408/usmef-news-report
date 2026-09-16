@@ -182,6 +182,8 @@ def _replace_excel_charts(staging_dir: Path, excel_path: Path) -> None:
         ("호주산 어린소가격", "image3.bmp", 4, 166, (736, 343)),  # 소-호주 FJ
         ("미국산 지육가격", "image4.bmp", 5, 169, (754, 330)),  # 돼지-미국 FM
         ("독일산 지육가격", "image5.bmp", 6, 329, (833, 341)),  # 돼지-EU(독일) LQ
+        ("미국산 신선 WOG(통닭) 가격", "image6.bmp", 8, 8, (595, 292)),  # 미국 육계 그래프(WOG) H
+        ("브라질 육계 가격", "image7.bmp", 10, 12, (1110, 411)),  # 브라질그래프 L
     )
     for label, filename, sheet_index, anchor_column, image_size in charts:
         target = staging_dir / "BinData" / filename

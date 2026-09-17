@@ -10,6 +10,10 @@ $pending = Get-Content -LiteralPath $PendingPath -Raw | ConvertFrom-Json
 $sourceData = Get-Content -LiteralPath $MarketDataPath -Raw | ConvertFrom-Json
 $excel = $null
 $workbook = $null
+$originalCalculation = $null
+$originalEnableEvents = $null
+$originalScreenUpdating = $null
+$calculationOptimizationEnabled = $false
 
 function ConvertTo-ExcelColumnName {
     param([int]$ColumnNumber)
@@ -32,7 +36,11 @@ function Set-DisplayedValueComparisonFormulas {
 
     # 보고서 표는 8열이 한 주차 블록이다. 현재·전주·전년 값이 표에 보이는
     # 자릿수와 일치하도록 먼저 반올림한 뒤 증감률을 계산한다.
-    $lastColumn = $Sheet.UsedRange.Column + $Sheet.UsedRange.Columns.Count - 1
+    # report_육계계란 시트는 서식이 XFD 열까지 남아 있어 UsedRange 기준으로
+    # 찾으면 2,048개 주차 블록을 COM으로 매번 순회한다. 보고일자 행의 실제
+    # 마지막 헤더만 기준으로 삼으면 현재·과거 유효 주차만 갱신할 수 있다.
+    $xlToLeft = -4159
+    $lastColumn = $Sheet.Cells.Item($ReportDateRow, $Sheet.Columns.Count).End($xlToLeft).Column
     for ($blockStartColumn = 1; $blockStartColumn -le $lastColumn; $blockStartColumn += 8) {
         $reportDateText = [string]$Sheet.Cells.Item($ReportDateRow, $blockStartColumn).Value2
         if (-not [regex]::IsMatch($reportDateText, '\d{4}-\d{1,2}-\d{1,2}')) { continue }
@@ -64,7 +72,23 @@ try {
     $excel = New-Object -ComObject Excel.Application
     $excel.Visible = $false
     $excel.DisplayAlerts = $false
-    $workbook = $excel.Workbooks.Open($TemplatePath)
+    # 외부 연결은 이 보고서가 사용하지 않으므로 열 때 갱신하지 않는다.
+    $workbook = $excel.Workbooks.Open($TemplatePath, 0, $false)
+    # 수백 개의 셀·수식 변경 중 자동 재계산을 막고, 마지막 CalculateFull 한 번에
+    # 계산한다. 일부 Office 환경은 통합문서가 열리기 전 Calculation 변경을
+    # 허용하지 않으므로, 열기 뒤에만 적용하고 실패 시 기존 방식으로 계속한다.
+    $originalCalculation = $excel.Calculation
+    $originalEnableEvents = $excel.EnableEvents
+    $originalScreenUpdating = $excel.ScreenUpdating
+    $excel.EnableEvents = $false
+    $excel.ScreenUpdating = $false
+    try {
+        $excel.Calculation = -4135 # xlCalculationManual
+        $calculationOptimizationEnabled = $true
+    }
+    catch {
+        Write-Warning "Excel 수동 계산 모드를 설정하지 못해 기존 자동 계산 방식으로 계속합니다."
+    }
 
     foreach ($item in $pending) {
         $sheet = $workbook.Worksheets.Item([string]$item.sheetName)
@@ -599,6 +623,9 @@ try {
     }
 
     $excel.CalculateFull()
+    # 마지막 전체 계산이 끝난 뒤 원래 계산 모드로 돌린 상태에서 저장한다.
+    # 생성 파일을 사용자가 열었을 때 수동 계산 모드가 남지 않게 한다.
+    if ($calculationOptimizationEnabled -and $null -ne $originalCalculation) { $excel.Calculation = $originalCalculation }
     # 돼지-EU 시트는 연도별 표가 매우 넓다. 이 시트만 고정 창을 해제해
     # 과거 연도까지 자유롭게 가로 스크롤할 수 있도록 한다.
     $euSheet = $workbook.Worksheets.Item(6)
@@ -636,5 +663,15 @@ catch {
 }
 finally {
     if ($null -ne $workbook) { $workbook.Close($false) }
-    if ($null -ne $excel) { $excel.Quit() }
+    if ($null -ne $excel) {
+        try {
+            if ($calculationOptimizationEnabled -and $null -ne $originalCalculation) { $excel.Calculation = $originalCalculation }
+            if ($null -ne $originalEnableEvents) { $excel.EnableEvents = $originalEnableEvents }
+            if ($null -ne $originalScreenUpdating) { $excel.ScreenUpdating = $originalScreenUpdating }
+        }
+        catch {
+            # Excel 종료 직전의 응용 프로그램 설정 복원 실패는 생성본에 영향을 주지 않는다.
+        }
+        $excel.Quit()
+    }
 }

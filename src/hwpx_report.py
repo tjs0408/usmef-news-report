@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -25,7 +26,7 @@ from src.hwp_report import HwpReportError, build_hwp_table_payload
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 HWPX_TEMPLATE_PATH = PROJECT_ROOT / "report_template" / "weekly_overseas_market_report_table_template.hwpx"
 USDA_CATTLE_BEEF_PDF_URL = "https://www.ams.usda.gov/mnreports/lsddcbs.pdf"
-EXCEL_CHART_EXPORT_SCRIPT = PROJECT_ROOT / "work" / "export_excel_chart.ps1"
+EXCEL_CHART_BATCH_EXPORT_SCRIPT = PROJECT_ROOT / "work" / "export_excel_charts.ps1"
 
 _NS = {"hp": "http://www.hancom.co.kr/hwpml/2011/paragraph"}
 _HP = "{http://www.hancom.co.kr/hwpml/2011/paragraph}"
@@ -177,7 +178,12 @@ def _download_weekly_choice_cutout_png() -> bytes:
 
 
 def _replace_excel_charts(staging_dir: Path, excel_path: Path) -> None:
-    """Excel의 호주 소·미국 돼지·독일 돼지 그래프를 HWPX 원본 영역에 넣는다."""
+    """Excel 그래프를 한 번에 내보내 HWPX 원본 영역에 넣는다.
+
+    Excel COM을 차트마다 새로 시작하면 시작·파일 열기 비용이 누적된다. 다섯 개
+    차트를 하나의 읽기 전용 Excel 세션에서 PNG로 내보낸 뒤, Python에서 HWPX용
+    BMP 크기만 각각 맞춘다.
+    """
     charts = (
         ("호주산 어린소가격", "image3.bmp", 4, 166, (736, 343)),  # 소-호주 FJ
         ("미국산 지육가격", "image4.bmp", 5, 169, (754, 330)),  # 돼지-미국 FM
@@ -185,36 +191,50 @@ def _replace_excel_charts(staging_dir: Path, excel_path: Path) -> None:
         ("미국산 신선 WOG(통닭) 가격", "image6.bmp", 8, 8, (595, 292)),  # 미국 육계 그래프(WOG) H
         ("브라질 육계 가격", "image7.bmp", 10, 12, (1110, 411)),  # 브라질그래프 L
     )
-    for label, filename, sheet_index, anchor_column, image_size in charts:
+
+    for label, filename, _, _, _ in charts:
         target = staging_dir / "BinData" / filename
         if not target.is_file():
             raise HwpReportError(f"HWPX 양식에서 {label} 그래프 영역을 찾지 못했습니다.")
-        target.write_bytes(
-            _export_excel_chart_bmp(excel_path, sheet_index, anchor_column, image_size, label)
-        )
+
+    png_paths = _export_excel_charts_png(excel_path, charts)
+    for chart_index, (label, filename, _, _, image_size) in enumerate(charts, start=1):
+        target = staging_dir / "BinData" / filename
+        target.write_bytes(_convert_chart_to_bmp(png_paths[chart_index], image_size, label))
 
 
-def _export_excel_chart_bmp(
+def _export_excel_charts_png(
     excel_path: Path,
-    sheet_index: int,
-    anchor_column: int,
-    image_size: tuple[int, int],
-    label: str,
-) -> bytes:
-    """지정 Excel 차트를 HWPX 원본 크기의 테두리 없는 BMP로 변환한다."""
-    if not EXCEL_CHART_EXPORT_SCRIPT.is_file():
-        raise HwpReportError("Excel 그래프 내보내기 도구를 찾지 못했습니다.")
+    charts: tuple[tuple[str, str, int, int, tuple[int, int]], ...],
+) -> dict[int, bytes]:
+    """읽기 전용 Excel 세션 하나에서 지정 차트를 모두 PNG로 내보낸다."""
+    if not EXCEL_CHART_BATCH_EXPORT_SCRIPT.is_file():
+        raise HwpReportError("Excel 그래프 일괄 내보내기 도구를 찾지 못했습니다.")
 
     powershell = shutil.which("powershell") or shutil.which("pwsh")
     if powershell is None:
-        raise HwpReportError(f"{label} 그래프를 내보낼 PowerShell을 찾지 못했습니다.")
+        raise HwpReportError("Excel 그래프를 내보낼 PowerShell을 찾지 못했습니다.")
 
-    with tempfile.TemporaryDirectory(prefix="australia_cattle_chart_") as temporary_directory:
+    with tempfile.TemporaryDirectory(prefix="hwpx_excel_charts_") as temporary_directory:
         # Windows PowerShell의 인수 코드페이지가 한글 파일명을 깨뜨릴 수 있다.
         # 읽기 전용 사본을 영문 임시 경로에 두고, 원본 업로드 파일은 건드리지 않는다.
         source_copy = Path(temporary_directory) / "source_workbook.xlsx"
-        png_path = Path(temporary_directory) / "chart.png"
+        export_directory = Path(temporary_directory) / "charts"
+        chart_specs_path = Path(temporary_directory) / "chart_specs.json"
         shutil.copy2(excel_path, source_copy)
+        chart_specs_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "outputName": f"chart_{index}.png",
+                        "sheetIndex": sheet_index,
+                        "anchorColumn": anchor_column,
+                    }
+                    for index, (_, _, sheet_index, anchor_column, _) in enumerate(charts, start=1)
+                ]
+            ),
+            encoding="utf-8",
+        )
         try:
             result = subprocess.run(
                 [
@@ -223,40 +243,52 @@ def _export_excel_chart_bmp(
                     "-ExecutionPolicy",
                     "Bypass",
                     "-File",
-                    str(EXCEL_CHART_EXPORT_SCRIPT),
+                    str(EXCEL_CHART_BATCH_EXPORT_SCRIPT),
                     "-WorkbookPath",
                     str(source_copy),
-                    "-OutputPath",
-                    str(png_path),
-                    "-SheetIndex",
-                    str(sheet_index),
-                    "-AnchorColumn",
-                    str(anchor_column),
+                    "-OutputDirectory",
+                    str(export_directory),
+                    "-ChartSpecsPath",
+                    str(chart_specs_path),
                 ],
                 capture_output=True,
-                timeout=60,
+                timeout=90,
                 check=False,
             )
         except subprocess.TimeoutExpired as error:
-            raise HwpReportError(f"{label} 그래프를 내보내는 시간이 초과되었습니다.") from error
+            raise HwpReportError("Excel 그래프를 일괄 내보내는 시간이 초과되었습니다.") from error
 
-        if result.returncode != 0 or not png_path.is_file():
+        if result.returncode != 0:
             raw_details = result.stderr or result.stdout
             details = raw_details.decode("utf-8", errors="replace").strip() if raw_details else "알 수 없는 오류"
-            raise HwpReportError(f"{label} 그래프를 내보내지 못했습니다. ({details})")
+            raise HwpReportError(f"Excel 그래프를 일괄 내보내지 못했습니다. ({details})")
 
-        try:
-            # HWPX의 기존 그림 크기를 그대로 지켜야 이미지가 잘리거나 작아지지
-            # 않는다. 각 차트 영역의 화면 비율에 맞춰 변환한다.
-            with Image.open(png_path) as chart:
-                source = chart.convert("RGB")
-                # Excel 차트 내보내기 결과의 가장 바깥 1px 회색/검정 테두리는
-                # 한글 보고서의 표 선과 겹쳐 보인다. 데이터·축에는 닿지 않도록
-                # 바깥쪽 2px만 제거한 뒤 기존 그림 크기로 맞춘다.
-                trimmed = source.crop((2, 2, source.width - 2, source.height - 2))
-                fitted = trimmed.resize(image_size, Image.Resampling.LANCZOS)
-                stream = BytesIO()
-                fitted.save(stream, format="BMP")
-                return stream.getvalue()
-        except Exception as error:
-            raise HwpReportError(f"{label} 그래프 이미지를 변환하지 못했습니다. ({error})") from error
+        exported: dict[int, bytes] = {}
+        for index, (label, _, _, _, _) in enumerate(charts, start=1):
+            png_path = export_directory / f"chart_{index}.png"
+            if not png_path.is_file() or png_path.stat().st_size == 0:
+                raise HwpReportError(f"{label} 그래프 PNG 파일을 만들지 못했습니다.")
+            # TemporaryDirectory가 지워지기 전에 이미지 바이트를 보관한다.
+            exported[index] = png_path.read_bytes()
+        return exported
+
+
+def _convert_chart_to_bmp(png_bytes: bytes, image_size: tuple[int, int], label: str) -> bytes:
+    """내보낸 Excel 차트를 HWPX의 기존 그림 크기·외곽선 규격으로 변환한다."""
+    try:
+        # HWPX의 기존 그림 크기를 그대로 지켜야 이미지가 잘리거나 작아지지
+        # 않는다. 각 차트 영역의 화면 비율에 맞춰 변환한다.
+        with Image.open(BytesIO(png_bytes)) as chart:
+            source = chart.convert("RGB")
+            if source.width <= 4 or source.height <= 4:
+                raise ValueError("차트 이미지가 너무 작습니다.")
+            # Excel 차트 내보내기 결과의 가장 바깥 1px 회색/검정 테두리는
+            # 한글 보고서의 표 선과 겹쳐 보인다. 데이터·축에는 닿지 않도록
+            # 바깥쪽 2px만 제거한 뒤 기존 그림 크기로 맞춘다.
+            trimmed = source.crop((2, 2, source.width - 2, source.height - 2))
+            fitted = trimmed.resize(image_size, Image.Resampling.LANCZOS)
+            stream = BytesIO()
+            fitted.save(stream, format="BMP")
+            return stream.getvalue()
+    except Exception as error:
+        raise HwpReportError(f"{label} 그래프 이미지를 변환하지 못했습니다. ({error})") from error

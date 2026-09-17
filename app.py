@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 import os
 from pathlib import Path
@@ -16,7 +17,6 @@ from src.crawler import (
     fetch_aud_krw_exchange_rates,
     fetch_brl_krw_exchange_rates,
     fetch_cepea_brazil_chicken_prices,
-    fetch_cepea_brazil_chicken_prices_for_period,
     fetch_eur_krw_exchange_rates,
     fetch_jpy_krw_exchange_rates,
     fetch_jz_tokyo_egg_prices,
@@ -206,27 +206,76 @@ def _run_report_job(job_id: str, template_path: Path) -> None:
                 message=message,
             )
 
-        market_data = fetch_market_data_for_report_dates(report_dates, update_ocr_progress) if report_dates else []
+        # 서로 다른 기관의 원자료는 서로 의존하지 않는다. 이전에는 이 요청들을
+        # 하나씩 끝낼 때까지 기다렸기 때문에, 최신 1주만 채워도 응답 시간이 모두
+        # 합산됐다. 사이트별 요청은 제한된 작업자 수로 병렬 처리하되, Excel COM
+        # 저장과 HWPX 생성은 아래에서 계속 단일 순서로 처리한다.
+        initial_tasks: dict[object, tuple[str, str]] = {}
+        initial_results: dict[str, object] = {}
+        with ThreadPoolExecutor(max_workers=4, thread_name_prefix="market-source") as executor:
+            if report_dates:
+                initial_tasks[
+                    executor.submit(fetch_market_data_for_report_dates, report_dates, update_ocr_progress)
+                ] = ("market", "USMEF 뉴스라인")
+            if eu_germany_rows:
+                eu_germany_dates = {date.fromisoformat(str(row["weekEnded"])) for row in eu_germany_rows}
+                initial_tasks[
+                    executor.submit(fetch_ahdb_germany_pig_prices, eu_germany_dates)
+                ] = ("euGermany", "AHDB 독일 돼지고기 가격")
+            if japan_egg_rows:
+                japan_egg_dates = {date.fromisoformat(str(row["priceDate"])) for row in japan_egg_rows}
+                initial_tasks[
+                    executor.submit(fetch_jz_tokyo_egg_prices, japan_egg_dates)
+                ] = ("japanEgg", "JA 전농타마고 도쿄 M란 기준치")
+            if us_egg_rows:
+                us_egg_dates = {date.fromisoformat(str(row["weekEnded"])) for row in us_egg_rows}
+                initial_tasks[
+                    executor.submit(fetch_usda_us_egg_data, us_egg_dates)
+                ] = ("usEgg", "USDA 미국 계란")
+            if us_chicken_rows:
+                us_chicken_dates = {date.fromisoformat(str(row["weekEnded"])) for row in us_chicken_rows}
+                initial_tasks[
+                    executor.submit(fetch_usda_us_chicken_data, us_chicken_dates)
+                ] = ("usChicken", "USDA 미국 닭고기")
+            if australia_beef_rows:
+                australia_beef_dates = {date.fromisoformat(str(row["weekEnded"])) for row in australia_beef_rows}
+                initial_tasks[
+                    executor.submit(fetch_mla_australia_cattle_data, australia_beef_dates)
+                ] = ("australiaBeef", "MLA 호주 소고기")
+
+            if initial_tasks:
+                _update_job(
+                    job_id,
+                    progress=12,
+                    message=f"{len(initial_tasks)}개 해외 원자료를 동시에 확인하고 있습니다.",
+                )
+                completed_sources = 0
+                for future in as_completed(initial_tasks):
+                    key, label = initial_tasks[future]
+                    initial_results[key] = future.result()
+                    completed_sources += 1
+                    _update_job(
+                        job_id,
+                        progress=35 + round(completed_sources / len(initial_tasks) * 42),
+                        message=f"{label} 확인을 마쳤습니다. ({completed_sources}/{len(initial_tasks)})",
+                    )
+
+        market_data = list(initial_results.get("market", []))
         available_market_dates = {item["구분"] for item in market_data}
         market_pending_rows = [
             row
             for row in market_pending_rows
             if date.fromisoformat(str(row["reportDate"])) in available_market_dates
         ]
-        _update_job(job_id, progress=35, message="AHDB 독일 돼지고기 가격을 확인하고 있습니다.")
-        eu_germany_dates = {date.fromisoformat(str(row["weekEnded"])) for row in eu_germany_rows}
-        eu_germany_prices = fetch_ahdb_germany_pig_prices(eu_germany_dates)
-        _update_job(job_id, progress=42, message="JA 전농타마고의 도쿄 M란 기준치를 확인하고 있습니다.")
-        japan_egg_dates = {date.fromisoformat(str(row["priceDate"])) for row in japan_egg_rows}
-        japan_egg_prices = fetch_jz_tokyo_egg_prices(japan_egg_dates)
+        eu_germany_prices = dict(initial_results.get("euGermany", {}))
+        japan_egg_prices = dict(initial_results.get("japanEgg", {}))
         japan_egg_rows = [
             row
             for row in japan_egg_rows
             if date.fromisoformat(str(row["priceDate"])) in japan_egg_prices
         ]
-        _update_job(job_id, progress=49, message="USDA 미국 계란의 주간 재고량과 Large 평균가격을 확인하고 있습니다.")
         us_egg_dates = {date.fromisoformat(str(row["weekEnded"])) for row in us_egg_rows}
-        us_egg_data = fetch_usda_us_egg_data(us_egg_dates)
+        us_egg_data = dict(initial_results.get("usEgg", {}))
         unpublished_us_egg_dates = us_egg_dates - set(us_egg_data)
         us_egg_rows = [
             row
@@ -235,18 +284,14 @@ def _run_report_job(job_id: str, template_path: Path) -> None:
         ]
         if unpublished_us_egg_dates:
             deferred_dates = ", ".join(item.isoformat() for item in sorted(unpublished_us_egg_dates))
-            _update_job(job_id, progress=55, message=f"USDA 미국 계란 가격 보고서가 아직 게시되지 않아 이번 실행에서는 건너뜁니다. ({deferred_dates})")
-        _update_job(job_id, progress=56, message="USDA 미국 닭고기 WOG 주간 가중평균 가격을 확인하고 있습니다.")
-        us_chicken_dates = {date.fromisoformat(str(row["weekEnded"])) for row in us_chicken_rows}
-        us_chicken_prices = fetch_usda_us_chicken_data(us_chicken_dates)
+            _update_job(job_id, progress=78, message=f"USDA 미국 계란 가격 보고서가 아직 게시되지 않아 이번 실행에서는 건너뜁니다. ({deferred_dates})")
+        us_chicken_prices = dict(initial_results.get("usChicken", {}))
         us_chicken_rows = [
             row
             for row in us_chicken_rows
             if date.fromisoformat(str(row["weekEnded"])) in us_chicken_prices
         ]
-        _update_job(job_id, progress=63, message="MLA 호주 소고기 주간 도축량과 EYCI를 확인하고 있습니다.")
-        australia_beef_dates = {date.fromisoformat(str(row["weekEnded"])) for row in australia_beef_rows}
-        australia_beef_data = fetch_mla_australia_cattle_data(australia_beef_dates)
+        australia_beef_data = dict(initial_results.get("australiaBeef", {}))
         australia_beef_rows = [
             row
             for row in australia_beef_rows
@@ -257,14 +302,29 @@ def _run_report_job(job_id: str, template_path: Path) -> None:
             brazil_chicken_dates = {date.fromisoformat(str(row["weekEnded"])) for row in brazil_chicken_rows}
             current_month_start = date.today().replace(day=1)
             previous_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
+            graph_price_dates = {
+                previous_month_start + timedelta(days=offset)
+                for offset in range((date.today() - previous_month_start).days + 1)
+            }
             try:
-                brazil_chicken_prices = fetch_cepea_brazil_chicken_prices(brazil_chicken_dates)
+                # 주간 표와 브라질그래프는 같은 CEPEA 가격 파일을 사용한다.
+                # 두 요청을 합쳐 파일 다운로드·Excel COM 읽기를 한 번으로 줄인다.
+                all_brazil_prices = fetch_cepea_brazil_chicken_prices(brazil_chicken_dates | graph_price_dates)
+                brazil_chicken_prices = {
+                    item_date: price
+                    for item_date, price in all_brazil_prices.items()
+                    if item_date in brazil_chicken_dates
+                }
                 brazil_chicken_rows = [
                     row
                     for row in brazil_chicken_rows
                     if date.fromisoformat(str(row["weekEnded"])) in brazil_chicken_prices
                 ]
-                brazil_chicken_graph_prices = fetch_cepea_brazil_chicken_prices_for_period(previous_month_start, date.today())
+                brazil_chicken_graph_prices = {
+                    item_date: price
+                    for item_date, price in all_brazil_prices.items()
+                    if previous_month_start <= item_date <= date.today()
+                }
             except RuntimeError:
                 # CEPEA의 봇 방지·일시 장애로 가격 파일에 접근하지 못해도 다른
                 # 국가 보고서는 생성한다. 브라질 빈칸은 다음 실행에서 재시도된다.
@@ -285,10 +345,42 @@ def _run_report_job(job_id: str, template_path: Path) -> None:
                 progress=82,
                 message="CEPEA 브라질 닭고기 수집은 봇 탐지 방지를 위해 일시 중지되어 있습니다.",
             )
-        _update_job(job_id, progress=83, message="날짜별 USD/KRW·EUR/KRW·JPY/KRW·BRL/KRW 매매기준율을 확인하고 있습니다.")
+        _update_job(job_id, progress=83, message="날짜별 통화별 매매기준율을 확인하고 있습니다.")
         exchange_dates = {date.fromisoformat(str(row["exchangeDate"])) for row in market_pending_rows}
         exchange_dates.update(date.fromisoformat(str(row["exchangeDate"])) for row in us_egg_rows)
-        exchange_rates = fetch_usd_krw_exchange_rates(exchange_dates)
+        euro_exchange_dates = {date.fromisoformat(str(row["euroExchangeDate"])) for row in eu_germany_rows}
+        japan_egg_exchange_dates = {date.fromisoformat(str(row["exchangeDate"])) for row in japan_egg_rows}
+        brazil_chicken_exchange_dates = {date.fromisoformat(str(row["exchangeDate"])) for row in brazil_chicken_rows}
+        australia_beef_exchange_dates = {date.fromisoformat(str(row["exchangeDate"])) for row in australia_beef_rows}
+
+        # 동일한 환율 API라도 통화별 URL과 날짜 집합은 독립적이다. 한 통화를
+        # 기다린 뒤 다음 통화를 요청하지 않고, 최대 4개 요청만 동시에 보낸다.
+        exchange_tasks: dict[object, tuple[str, str]] = {}
+        exchange_results: dict[str, object] = {}
+        with ThreadPoolExecutor(max_workers=4, thread_name_prefix="exchange-rate") as executor:
+            if exchange_dates:
+                exchange_tasks[executor.submit(fetch_usd_krw_exchange_rates, exchange_dates)] = ("usd", "USD/KRW")
+            if euro_exchange_dates:
+                exchange_tasks[executor.submit(fetch_eur_krw_exchange_rates, euro_exchange_dates)] = ("eur", "EUR/KRW")
+            if japan_egg_exchange_dates:
+                exchange_tasks[executor.submit(fetch_jpy_krw_exchange_rates, japan_egg_exchange_dates)] = ("jpy", "JPY/KRW")
+            if brazil_chicken_exchange_dates:
+                exchange_tasks[executor.submit(fetch_brl_krw_exchange_rates, brazil_chicken_exchange_dates)] = ("brl", "BRL/KRW")
+            if australia_beef_exchange_dates:
+                exchange_tasks[executor.submit(fetch_aud_krw_exchange_rates, australia_beef_exchange_dates)] = ("aud", "AUD/KRW")
+
+            completed_exchanges = 0
+            for future in as_completed(exchange_tasks):
+                key, label = exchange_tasks[future]
+                exchange_results[key] = future.result()
+                completed_exchanges += 1
+                _update_job(
+                    job_id,
+                    progress=83 + round(completed_exchanges / len(exchange_tasks) * 7),
+                    message=f"{label} 매매기준율을 확인했습니다. ({completed_exchanges}/{len(exchange_tasks)})",
+                )
+
+        exchange_rates = dict(exchange_results.get("usd", {}))
         market_pending_rows = [
             row
             for row in market_pending_rows
@@ -299,24 +391,20 @@ def _run_report_job(job_id: str, template_path: Path) -> None:
             for row in us_egg_rows
             if date.fromisoformat(str(row["exchangeDate"])) in exchange_rates
         ]
-        euro_exchange_dates = {date.fromisoformat(str(row["euroExchangeDate"])) for row in eu_germany_rows}
-        eur_exchange_rates = fetch_eur_krw_exchange_rates(euro_exchange_dates)
-        japan_egg_exchange_dates = {date.fromisoformat(str(row["exchangeDate"])) for row in japan_egg_rows}
-        jpy_exchange_rates = fetch_jpy_krw_exchange_rates(japan_egg_exchange_dates)
+        eur_exchange_rates = dict(exchange_results.get("eur", {}))
+        jpy_exchange_rates = dict(exchange_results.get("jpy", {}))
         japan_egg_rows = [
             row
             for row in japan_egg_rows
             if date.fromisoformat(str(row["exchangeDate"])) in jpy_exchange_rates
         ]
-        brazil_chicken_exchange_dates = {date.fromisoformat(str(row["exchangeDate"])) for row in brazil_chicken_rows}
-        brl_exchange_rates = fetch_brl_krw_exchange_rates(brazil_chicken_exchange_dates)
+        brl_exchange_rates = dict(exchange_results.get("brl", {}))
         brazil_chicken_rows = [
             row
             for row in brazil_chicken_rows
             if date.fromisoformat(str(row["exchangeDate"])) in brl_exchange_rates
         ]
-        australia_beef_exchange_dates = {date.fromisoformat(str(row["exchangeDate"])) for row in australia_beef_rows}
-        aud_exchange_rates = fetch_aud_krw_exchange_rates(australia_beef_exchange_dates)
+        aud_exchange_rates = dict(exchange_results.get("aud", {}))
         _update_job(job_id, progress=91, message="수집한 값과 환율을 엑셀 양식에 입력하고 있습니다.")
         created_at = datetime.now().strftime("%Y%m%d_%H%M%S")
         report_filename = f"해외시장_수급_및_가격_동향_{created_at}.xlsx"
@@ -390,6 +478,17 @@ def _complete_job_with_hwp(job_id: str, report_path: Path, report_filename: str,
 def _update_job(job_id: str, **changes: object) -> None:
     with REPORT_JOBS_LOCK:
         job = REPORT_JOBS.setdefault(job_id, {})
+        # 병렬 수집 중 늦게 끝난 작업의 진행 메시지가 이미 표시한 진행률을
+        # 뒤로 되돌리지 않도록 한다. 실패 상태는 0%를 명확히 보여야 하므로
+        # 이 경우에는 예외로 둔다.
+        requested_progress = changes.get("progress")
+        requested_status = str(changes.get("status", job.get("status", "running")))
+        if (
+            isinstance(requested_progress, int)
+            and requested_status == "running"
+            and isinstance(job.get("progress"), int)
+        ):
+            changes["progress"] = max(int(job["progress"]), requested_progress)
         job.update(changes)
 
 

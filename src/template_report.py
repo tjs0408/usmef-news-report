@@ -13,6 +13,7 @@ import time
 from typing import Mapping, Sequence
 import xml.etree.ElementTree as ElementTree
 from zipfile import ZIP_DEFLATED, ZipFile
+from .excel_charts import chart_specs, record_chart_exports
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -52,6 +53,17 @@ US_EGG_SHEET = {
     "priceColumn": "AB",
     "exchangeColumn": "AD",
     "market": "us_egg",
+}
+US_EGG_CONSUMER_PRICE_GRAPH = {
+    "sheetName": "계란-미국",
+    "yearHeaderRow": 2,
+    "monthStartRow": 3,
+    "monthEndRow": 14,
+    "yearColumns": ("AO", "AP", "AQ", "AR"),
+    # 그래프 양식의 연도 헤더는 공유 문자열이라 ZIP의 원시 셀 값으로는
+    # 문자열 인덱스만 읽힌다. 현재 양식의 고정된 연도-열 배치를 명시한다.
+    "years": {"AO": 2023, "AP": 2024, "AQ": 2025, "AR": 2026},
+    "market": "us_egg_consumer_price",
 }
 BRAZIL_CHICKEN_SHEET = {
     "sheetName": "닭-브라질",
@@ -200,6 +212,33 @@ def find_pending_us_egg_rows(template_path: Path, today: date) -> list[dict[str,
     return pending
 
 
+def find_pending_us_egg_consumer_price_rows(template_path: Path, today: date) -> list[dict[str, object]]:
+    """계란-미국 그래프의 월별 FRED 소비자가격 빈칸을 찾습니다."""
+    config = US_EGG_CONSUMER_PRICE_GRAPH
+    with ZipFile(template_path, "r") as archive:
+        sheet_paths = _find_sheet_paths(archive)
+        cell_values = _read_sheet_cell_values(archive, sheet_paths[config["sheetName"]])
+
+    pending: list[dict[str, object]] = []
+    current_month = today.replace(day=1)
+    for column in config["yearColumns"]:
+        year = int(config["years"][column])
+        for row in range(config["monthStartRow"], config["monthEndRow"] + 1):
+            month = row - config["monthStartRow"] + 1
+            target_month = date(year, month, 1)
+            if target_month > current_month or cell_values.get(f"{column}{row}") is not None:
+                continue
+            pending.append(
+                {
+                    **config,
+                    "row": row,
+                    "column": column,
+                    "month": target_month.isoformat(),
+                }
+            )
+    return pending
+
+
 def find_pending_brazil_chicken_rows(template_path: Path, today: date) -> list[dict[str, object]]:
     """닭-브라질 양식에서 À vista R$/kg 또는 BRL 환율이 비어 있는 주차를 찾습니다."""
     with ZipFile(template_path, "r") as archive:
@@ -290,6 +329,8 @@ def write_market_data_to_template(
     jpy_exchange_rates: Mapping[date, float] | None = None,
     us_egg_rows: Sequence[Mapping[str, object]] = (),
     us_egg_data: Mapping[date, Mapping[str, float]] | None = None,
+    us_egg_consumer_price_rows: Sequence[Mapping[str, object]] = (),
+    us_egg_consumer_prices: Mapping[date, float] | None = None,
     brazil_chicken_rows: Sequence[Mapping[str, object]] = (),
     brazil_chicken_prices: Mapping[date, float] | None = None,
     brl_exchange_rates: Mapping[date, float] | None = None,
@@ -299,6 +340,7 @@ def write_market_data_to_template(
     australia_beef_data: Mapping[date, Mapping[str, float]] | None = None,
     aud_exchange_rates: Mapping[date, float] | None = None,
     brazil_chicken_graph_prices: Mapping[date, float] | None = None,
+    chart_output_directory: Path | None = None,
 ) -> None:
     """수집값·환율을 입력하고, 다음 주 뉴스로 이전 주 도축두수를 정정합니다."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -333,6 +375,10 @@ def write_market_data_to_template(
             }
             for item, values in (us_egg_data or {}).items()
         ],
+        "usEggConsumerPrices": [
+            {"month": item.isoformat(), "consumerPrice": price}
+            for item, price in sorted((us_egg_consumer_prices or {}).items())
+        ],
         "brazilChickenPrices": [
             {"weekEnded": item.isoformat(), "cashPrice": price}
             for item, price in (brazil_chicken_prices or {}).items()
@@ -364,6 +410,9 @@ def write_market_data_to_template(
             "exchangeRate": exchange_rates[date.fromisoformat(str(item["exchangeDate"]))],
         }
         for item in pending_rows
+    ] + [
+        dict(item)
+        for item in us_egg_consumer_price_rows
     ] + [
         {
             **item,
@@ -401,7 +450,7 @@ def write_market_data_to_template(
     try:
         pending_path.write_text(json.dumps(serialized_pending_rows), encoding="utf-8")
         market_data_path.write_text(json.dumps(serialized_data), encoding="utf-8")
-        _run_excel_update_script(template_path, output_path, pending_path, market_data_path)
+        _run_excel_update_script(template_path, output_path, pending_path, market_data_path, chart_output_directory)
     finally:
         pending_path.unlink(missing_ok=True)
         market_data_path.unlink(missing_ok=True)
@@ -412,6 +461,7 @@ def _run_excel_update_script(
     output_path: Path,
     pending_path: Path,
     market_data_path: Path,
+    chart_output_directory: Path | None = None,
 ) -> None:
     """Microsoft Excel로 기준 양식을 열어 값만 갱신하고 안전하게 저장합니다."""
     if os.name != "nt":
@@ -432,12 +482,20 @@ def _run_excel_update_script(
         "-MarketDataPath",
         str(market_data_path),
     ]
+    specs_path = output_path.with_suffix(".chart-specs.json")
+    if os.environ.get("REPORT_PROFILE_TIMINGS") == "1":
+        command.append("-ProfileTimings")
+    if chart_output_directory is not None:
+        chart_output_directory.mkdir(parents=True, exist_ok=True)
+        (chart_output_directory / "manifest.json").unlink(missing_ok=True)
+        specs_path.write_text(json.dumps(chart_specs()), encoding="utf-8")
+        command.extend(["-ChartSpecsPath", str(specs_path), "-ChartOutputDirectory", str(chart_output_directory)])
     last_error: subprocess.CalledProcessError | None = None
     # Excel COM은 자동 저장·계산 직후 일시적으로 0x800A03EC을 낼 수 있다.
     # 같은 임시 원본을 한 번만 다시 열어 재시도하면 데이터 중복 없이 복구된다.
     for attempt in range(2):
         try:
-            subprocess.run(
+            result = subprocess.run(
                 command,
                 check=True,
                 capture_output=True,
@@ -448,12 +506,21 @@ def _run_excel_update_script(
                 errors="replace",
                 timeout=120,
             )
+            if chart_output_directory is not None and "REPORT_CHART_EXPORT_OK" in result.stdout:
+                record_chart_exports(chart_output_directory, output_path)
+            if os.environ.get("REPORT_PROFILE_TIMINGS") == "1":
+                print("\n".join(line for line in result.stdout.splitlines() if line.startswith("EXCEL_PROFILE")), flush=True)
+            specs_path.unlink(missing_ok=True)
             return
         except subprocess.CalledProcessError as error:
             last_error = error
             if attempt == 0:
                 time.sleep(1)
+        except subprocess.TimeoutExpired as error:
+            specs_path.unlink(missing_ok=True)
+            raise RuntimeError("Excel 보고서 저장 시간이 초과되었습니다. 잠시 후 다시 실행해 주세요.") from error
 
+    specs_path.unlink(missing_ok=True)
     details = (last_error.stderr or last_error.stdout or "알 수 없는 오류").strip()
     raise RuntimeError(f"Excel 보고서를 저장하지 못했습니다. ({details})") from last_error
 

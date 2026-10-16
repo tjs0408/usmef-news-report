@@ -1,8 +1,11 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][string]$TemplatePath,
     [Parameter(Mandatory = $true)][string]$OutputPath,
     [Parameter(Mandatory = $true)][string]$PendingPath,
-    [Parameter(Mandatory = $true)][string]$MarketDataPath
+    [Parameter(Mandatory = $true)][string]$MarketDataPath,
+    [string]$ChartSpecsPath = '',
+    [string]$ChartOutputDirectory = '',
+    [switch]$ProfileTimings
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,6 +17,21 @@ $originalCalculation = $null
 $originalEnableEvents = $null
 $originalScreenUpdating = $null
 $calculationOptimizationEnabled = $false
+$reportSheetNames = @{}
+function Get-CachedReportSheetName([int]$Index) {
+    if (-not $reportSheetNames.ContainsKey($Index)) {
+        $reportSheetNames[$Index] = [string]$workbook.Worksheets.Item($Index).Name
+    }
+    return $reportSheetNames[$Index]
+}
+$phaseWatch = $null
+if ($ProfileTimings) { $phaseWatch = [Diagnostics.Stopwatch]::StartNew() }
+function Write-ProfileTiming([string]$Label) {
+    if ($ProfileTimings) {
+        Write-Output "EXCEL_PROFILE $Label $([math]::Round($phaseWatch.Elapsed.TotalSeconds, 2))s"
+        $phaseWatch.Restart()
+    }
+}
 
 function ConvertTo-ExcelColumnName {
     param([int]$ColumnNumber)
@@ -41,8 +59,15 @@ function Set-DisplayedValueComparisonFormulas {
     # 마지막 헤더만 기준으로 삼으면 현재·과거 유효 주차만 갱신할 수 있다.
     $xlToLeft = -4159
     $lastColumn = $Sheet.Cells.Item($ReportDateRow, $Sheet.Columns.Count).End($xlToLeft).Column
+    # Read once across COM; inspect historical formulas in local arrays.
+    $headerValues = $Sheet.Range($Sheet.Cells.Item($ReportDateRow, 1), $Sheet.Cells.Item($ReportDateRow, $lastColumn + 6)).Value2
+    $formulasByRow = @{}
+    foreach ($metric in $Metrics) {
+        $metricRow = [int]$metric.row
+        $formulasByRow[$metricRow] = $Sheet.Range($Sheet.Cells.Item($metricRow, 1), $Sheet.Cells.Item($metricRow, $lastColumn + 6)).Formula
+    }
     for ($blockStartColumn = 1; $blockStartColumn -le $lastColumn; $blockStartColumn += 8) {
-        $reportDateText = [string]$Sheet.Cells.Item($ReportDateRow, $blockStartColumn).Value2
+        $reportDateText = [string]$headerValues[1, $blockStartColumn]
         if (-not [regex]::IsMatch($reportDateText, '\d{4}-\d{1,2}-\d{1,2}')) { continue }
 
         foreach ($metric in $Metrics) {
@@ -58,8 +83,16 @@ function Set-DisplayedValueComparisonFormulas {
             $weekFormula = "=IFERROR(IF(OR($currentRef=$blank,$previousWeekRef=$blank),$blank,(ROUND($currentRef,$digits)-ROUND($previousWeekRef,$digits))/ROUND($previousWeekRef,$digits)),$blank)"
             $yearFormula = "=IFERROR(IF(OR($currentRef=$blank,$previousYearRef=$blank),$blank,(ROUND($currentRef,$digits)-ROUND($previousYearRef,$digits))/ROUND($previousYearRef,$digits)),$blank)"
             try {
-                $Sheet.Range($weekComparisonRef).Formula = $weekFormula
-                $Sheet.Range($yearComparisonRef).Formula = $yearFormula
+                # 이미 표시 단위 기준 산식이 들어간 과거 블록은 다시 쓰지 않는다.
+                # COM 수백 회 호출과 불필요한 재계산을 줄이면서, 이전 양식의
+                # 산식이 다르거나 빈 셀일 때만 정확한 새 산식으로 보정한다.
+                $rowFormulas = $formulasByRow[$row]
+                if ([string]$rowFormulas[1, ($blockStartColumn + 5)] -ne $weekFormula) {
+                    $Sheet.Range($weekComparisonRef).Formula = $weekFormula
+                }
+                if ([string]$rowFormulas[1, ($blockStartColumn + 6)] -ne $yearFormula) {
+                    $Sheet.Range($yearComparisonRef).Formula = $yearFormula
+                }
             }
             catch {
                 throw "Unable to assign rounded comparison formula. sheet=$($Sheet.Name), reportDate=$reportDateText, row=$row, weekCell=$weekComparisonRef, yearCell=$yearComparisonRef, error=$($_.Exception.Message)"
@@ -74,6 +107,7 @@ try {
     $excel.DisplayAlerts = $false
     # 외부 연결은 이 보고서가 사용하지 않으므로 열 때 갱신하지 않는다.
     $workbook = $excel.Workbooks.Open($TemplatePath, 0, $false)
+    Write-ProfileTiming 'open'
     # 수백 개의 셀·수식 변경 중 자동 재계산을 막고, 마지막 CalculateFull 한 번에
     # 계산한다. 일부 Office 환경은 통합문서가 열리기 전 Calculation 변경을
     # 허용하지 않으므로, 열기 뒤에만 적용하고 실패 시 기존 방식으로 계속한다.
@@ -129,6 +163,16 @@ try {
             $sheet.Range("$($item.inventoryColumn)$row").Value2 = [double]$eggData.weeklyInventory
             $sheet.Range("$($item.priceColumn)$row").Value2 = [double]$eggData.largeAveragePrice
             $sheet.Range("$($item.exchangeColumn)$row").Value2 = [double]$item.usdExchangeRate
+            continue
+        }
+
+        if ($item.market -eq 'us_egg_consumer_price') {
+            $consumerPrice = $sourceData.usEggConsumerPrices | Where-Object { $_.month -eq $item.month } | Select-Object -First 1
+            if ($null -eq $consumerPrice) { continue }
+            # FRED APU0000708111: 미국 도시 평균 대란 소비자가격(달러/12개)을
+            # 그래프의 해당 연도·월 셀에 원자료 자릿수 그대로 입력한다.
+            $sheet.Range("$($item.column)$row").Value2 = [double]$consumerPrice.consumerPrice
+            $sheet.Range("$($item.column)$row").NumberFormat = $sheet.Range("$($item.column)$($row - 1)").NumberFormat
             continue
         }
 
@@ -210,6 +254,7 @@ try {
         }
     }
 
+    Write-ProfileTiming 'source-cells'
     # 미국 육계 그래프는 닭-미국 시트의 기존·신규 Wtd Avg를 모두 반영한다.
     # 닭-미국 표 39행은 그래프 35행처럼 동일 주차가 정확히 4행 위에 있으므로,
     # Z열에 이미 값이 있는 경우도 매번 F열로 동기화해 빈 그래프 셀을 보정한다.
@@ -286,6 +331,7 @@ try {
     # 최근 목요일을 보고일자로 기록하면, 예를 들어 2026-09-11 실행 시에는
     # '보고일자 : 2026-9-10'이 표시된다.
     $reportDate = [datetime]::Today
+    Write-ProfileTiming 'graph-cells'
     $daysSinceThursday = (([int]$reportDate.DayOfWeek - [int][System.DayOfWeek]::Thursday + 7) % 7)
     $reportDate = $reportDate.AddDays(-$daysSinceThursday)
     $reportSheet = $workbook.Worksheets.Item(1)
@@ -386,7 +432,7 @@ try {
                 }
                 $sourceDate = $reportBlock.reportDate.AddDays([int]$link.dateOffset + [int]$period.weekOffset)
             $dateFormula = "DATE($($sourceDate.Year),$($sourceDate.Month),$($sourceDate.Day))"
-            $sourceSheetName = $workbook.Worksheets.Item([int]$link.sheetIndex).Name
+            $sourceSheetName = Get-CachedReportSheetName ([int]$link.sheetIndex)
             $dateRange = "'$sourceSheetName'!`$$($link.dateColumn)`$8:`$$($link.dateColumn)`$59"
             $valueRange = "'$sourceSheetName'!`$$($link.valueColumn)`$8:`$$($link.valueColumn)`$59"
             $availabilityRange = "'$sourceSheetName'!`$$($link.availabilityColumn)`$8:`$$($link.availabilityColumn)`$59"
@@ -465,7 +511,7 @@ try {
             foreach ($link in $chickenEggSourceLinks) {
                 $sourceDate = $blockReportDate.AddDays([int]$link.dateOffset)
                 $dateFormula = "DATE($($sourceDate.Year),$($sourceDate.Month),$($sourceDate.Day))"
-                $sourceSheetName = $workbook.Worksheets.Item([int]$link.sheetIndex).Name
+                $sourceSheetName = Get-CachedReportSheetName ([int]$link.sheetIndex)
                 $dateRange = "'$sourceSheetName'!`$$($link.dateColumn)`$6:`$$($link.dateColumn)`$57"
                 $valueRange = "'$sourceSheetName'!`$$($link.valueColumn)`$6:`$$($link.valueColumn)`$57"
                 $availabilityRange = "'$sourceSheetName'!`$$($link.availabilityColumn)`$6:`$$($link.availabilityColumn)`$57"
@@ -520,7 +566,7 @@ try {
         foreach ($link in $historicPoultryLinks) {
             $sourceDate = $historicReportDate.AddDays([int]$link.dateOffset)
             $dateFormula = "DATE($($sourceDate.Year),$($sourceDate.Month),$($sourceDate.Day))"
-            $sourceSheetName = $workbook.Worksheets.Item([int]$link.sheetIndex).Name
+            $sourceSheetName = Get-CachedReportSheetName ([int]$link.sheetIndex)
             $dateRange = "'$sourceSheetName'!`$$($link.dateColumn)`$6:`$$($link.dateColumn)`$57"
             $valueRange = "'$sourceSheetName'!`$$($link.valueColumn)`$6:`$$($link.valueColumn)`$57"
             $availabilityRange = "'$sourceSheetName'!`$$($link.availabilityColumn)`$6:`$$($link.availabilityColumn)`$57"
@@ -538,6 +584,7 @@ try {
     }
 
     # 표에 보이는 값과 증감률의 기준을 일치시킨다. 예를 들어 도축두수가
+    Write-ProfileTiming 'report-links'
     # 146.129 → 143.675라면 표시값 146 → 144로 비교해 -1.4%가 된다.
     $reportComparisonMetrics = @(
         @{ row = 214; digits = 0 }, @{ row = 215; digits = 2 },
@@ -552,6 +599,7 @@ try {
     )
     Set-DisplayedValueComparisonFormulas -Sheet $reportSheet -ReportDateRow 209 -Metrics $reportComparisonMetrics
     Set-DisplayedValueComparisonFormulas -Sheet $chickenEggReportSheet -ReportDateRow 62 -Metrics $chickenEggComparisonMetrics
+    Write-ProfileTiming 'comparison-formulas'
 
     # 전주·전년 대비 색상은 과거 전체가 아니라 이번에 현행화하는 최근 주차
     # 블록에만 적용한다. 제목(전주·전년·대비)은 기본 글자색을 검정으로 둔다.
@@ -584,46 +632,39 @@ try {
     $xlLess = 6
     foreach ($formatTarget in $comparisonFormatTargets) {
         $targetBlockStartColumn = [int]$formatTarget.blockStartColumn
-        $comparisonColumns = @($targetBlockStartColumn + 5)
-        $comparisonColumns += ($targetBlockStartColumn + 6)
-        foreach ($comparisonColumn in $comparisonColumns) {
-            try {
-                # 이전 실행에서 남았을 수 있는 넓은 조건부 서식을 해당 주차 블록만
-                # 제거한 뒤, 실제 퍼센트 데이터 행에만 다시 건다.
-                $blockComparisonRange = $formatTarget.sheet.Range(
-                    $formatTarget.sheet.Cells.Item([int]$formatTarget.clearTopRow, $comparisonColumn),
-                    $formatTarget.sheet.Cells.Item([int]$formatTarget.clearBottomRow, $comparisonColumn)
-                )
-                $blockComparisonRange.FormatConditions.Delete()
-                # 제목 행은 조건부 서식에서 제외해야 텍스트가 양수로 판정되어
-                # 빨강으로 보이는 문제를 막을 수 있다.
-                foreach ($headerRow in $formatTarget.headerRows) {
-                    $headerCell = $formatTarget.sheet.Cells.Item([int]$headerRow, $comparisonColumn)
-                    $headerCell.FormatConditions.Delete()
-                    $headerCell.Font.Color = 0
-                }
-                foreach ($comparisonRow in $formatTarget.comparisonRows) {
-                    $comparisonCell = $formatTarget.sheet.Cells.Item([int]$comparisonRow, $comparisonColumn)
-                    $comparisonCell.Font.Color = 0
-                    $positiveRule = $comparisonCell.FormatConditions.Add($xlCellValue, $xlGreater, '0')
-                    # 양식에서 기존에 쓰던 기본 빨강·파랑 색상값을 그대로 사용한다.
-                    $positiveRule.Font.Color = 255
-                    $negativeRule = $comparisonCell.FormatConditions.Add($xlCellValue, $xlLess, '0')
-                    $negativeRule.Font.Color = 16711680
-                    $sameRule = $comparisonCell.FormatConditions.Add($xlCellValue, $xlEqual, '0')
-                    $sameRule.Font.Color = 0
-                }
-            }
-            catch {
-                # 조건부 서식은 표시 보조 기능이다. 특정 양식의 병합 셀·기존 서식
-                # 충돌로 실패해도 수집값·산식·보고서 저장은 중단하지 않는다.
-                Write-Warning "비교율 색상 서식을 적용하지 못했습니다. sheet=$($formatTarget.sheet.Name), column=$comparisonColumn"
-            }
+        $leftColumn = ConvertTo-ExcelColumnName ($targetBlockStartColumn + 5)
+        $rightColumn = ConvertTo-ExcelColumnName ($targetBlockStartColumn + 6)
+        try {
+            $clearTop = [int]$formatTarget.clearTopRow
+            $clearBottom = [int]$formatTarget.clearBottomRow
+            $blockRange = $formatTarget.sheet.Range("${leftColumn}${clearTop}:${rightColumn}${clearBottom}")
+            $blockRange.FormatConditions.Delete()
+            $headerAddresses = @($formatTarget.headerRows | ForEach-Object { "${leftColumn}${_}:${rightColumn}${_}" })
+            $formatTarget.sheet.Range(($headerAddresses -join ',')).Font.Color = 0
+            # One disjoint numeric range per block; headings are NEVER included.
+            # This preserves cell-value rules while replacing hundreds of COM
+            # Add/Font calls with just three rules over the same numeric cells.
+            $dataAddresses = @($formatTarget.comparisonRows | ForEach-Object { "${leftColumn}${_}:${rightColumn}${_}" })
+            $dataRange = $formatTarget.sheet.Range(($dataAddresses -join ','))
+            $dataRange.Font.Color = 0
+            $positiveRule = $dataRange.FormatConditions.Add($xlCellValue, $xlGreater, '0')
+            $positiveRule.Font.Color = 255
+            $negativeRule = $dataRange.FormatConditions.Add($xlCellValue, $xlLess, '0')
+            $negativeRule.Font.Color = 16711680
+            $sameRule = $dataRange.FormatConditions.Add($xlCellValue, $xlEqual, '0')
+            $sameRule.Font.Color = 0
+        }
+        catch {
+            Write-Warning "Unable to apply comparison colors. sheet=$($formatTarget.sheet.Name), column=$leftColumn"
         }
     }
 
-    $excel.CalculateFull()
-    # 마지막 전체 계산이 끝난 뒤 원래 계산 모드로 돌린 상태에서 저장한다.
+    # 새 값·수식과 그 의존 셀만 계산한다. 이전의 CalculateFull은 매 실행마다
+    # 변경되지 않은 넓은 그래프·과거 보고 블록까지 강제로 다시 계산해 생성 시간이
+    # 길어졌다. Excel은 위에서 변경한 수식의 의존 관계를 이미 dirty로 표시한다.
+    $excel.Calculate()
+    Write-ProfileTiming 'format-and-calculate'
+    # 마지막 증분 계산이 끝난 뒤 원래 계산 모드로 돌린 상태에서 저장한다.
     # 생성 파일을 사용자가 열었을 때 수동 계산 모드가 남지 않게 한다.
     if ($calculationOptimizationEnabled -and $null -ne $originalCalculation) { $excel.Calculation = $originalCalculation }
     # 돼지-EU 시트는 연도별 표가 매우 넓다. 이 시트만 고정 창을 해제해
@@ -652,9 +693,40 @@ try {
     }
     try {
         $workbook.SaveAs($OutputPath, 51)
+        Write-ProfileTiming 'save'
     }
     catch {
         throw "Unable to save Excel output. path=$OutputPath, error=$($_.Exception.Message)"
+    }
+    # 기준 양식에는 같은 통합문서의 보기 창이 두 개 저장되어 있다. ZIP/XML을
+    # 직접 수정하면 이후 그래프 내보내기의 Workbooks.Open이 실패할 수 있으므로,
+    # Excel이 제공하는 창 닫기와 저장만 사용한다. 첫 번째 보기를 닫으면 현재
+    # 활성 보기가 남아 생성본은 한 창으로 열리고, 차트 자동 내보내기도 보존된다.
+    try {
+        if ($workbook.Windows.Count -gt 1) {
+            $workbook.Windows.Item(1).Close()
+            Start-Sleep -Milliseconds 200
+            $workbook.Save()
+        }
+    }
+    catch {
+        # 보기 창 정리는 표시 보조 기능이다. 지원하지 않는 Excel 환경에서는
+        # 보고서 생성 자체를 실패시키지 않고 기존 보기 상태로 저장한다.
+        Write-Warning "통합문서의 보조 보기 창을 정리하지 못했습니다."
+    }
+    if ($ChartSpecsPath -and $ChartOutputDirectory) {
+        Write-ProfileTiming 'window-cleanup'
+        try {
+            . (Join-Path $PSScriptRoot 'excel_chart_helpers.ps1')
+            $excel.ScreenUpdating = $true
+            Export-ReportWorkbookCharts -Workbook $workbook -OutputDirectory $ChartOutputDirectory -ChartSpecsPath $ChartSpecsPath
+            Write-Output 'REPORT_CHART_EXPORT_OK'
+            Write-ProfileTiming 'chart-export'
+        }
+        catch {
+            # Saved Excel remains valid. HWPX will use the standalone fallback.
+            Write-Warning "Deferred chart export: $($_.Exception.Message)"
+        }
     }
 }
 catch {
@@ -662,7 +734,11 @@ catch {
     throw "Excel update failed at script line $line. $($_.Exception.Message)"
 }
 finally {
-    if ($null -ne $workbook) { $workbook.Close($false) }
+    # Excel이 내부 오류나 라이선스 제한으로 먼저 종료된 경우, 정리 과정에서
+    # "RPC server is unavailable"가 발생해 실제 생성 결과를 실패로 덮지 않게 한다.
+    if ($null -ne $workbook) {
+        try { $workbook.Close($false) } catch {}
+    }
     if ($null -ne $excel) {
         try {
             if ($calculationOptimizationEnabled -and $null -ne $originalCalculation) { $excel.Calculation = $originalCalculation }
@@ -672,6 +748,7 @@ finally {
         catch {
             # Excel 종료 직전의 응용 프로그램 설정 복원 실패는 생성본에 영향을 주지 않는다.
         }
-        $excel.Quit()
+        try { $excel.Quit() } catch {}
+        try { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($excel) } catch {}
     }
 }

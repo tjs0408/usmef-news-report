@@ -7,6 +7,8 @@ work/*
 !work/update_report_excel.ps1
 !work/update_hwp_table_report.ps1
 !work/export_excel_chart.ps1
+!work/excel_chart_helpers.ps1
+!work/profile_generation.py
 
 # Generated reports
 output/*

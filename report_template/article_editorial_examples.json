@@ -1,0 +1,1426 @@
+{
+  "historicalStyleOnly": true,
+  "boardUrl": "https://www.ekapepia.com/v3/board/list.do?menuSn=28&boardInfoNo=0153",
+  "examples": [
+    {
+      "kind": "us",
+      "text": "캔자스·텍사스·오클라호마의 이민 단속 강화로 가공업체 근로자 결근이 늘며 소 운송과 도축·가공 차질 우려",
+      "reportDate": "2026-10-01",
+      "page": 1,
+      "reportOrigin": "public-board",
+      "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041105&dmlType=SELECT",
+      "boardNo": "00041105",
+      "theme": "labor_logistics",
+      "factShape": "policy change -> absenteeism -> supply-chain disruption risk"
+    },
+    {
+      "kind": "us",
+      "text": "소고기 가격 상승으로 번식우·송아지 농가는 높은 판매가격의 혜택을 받는 반면, 비육농가·가공업체는 생우가격 상승으로 비용 압박",
+      "reportDate": "2026-08-13",
+      "page": 1,
+      "reportOrigin": "user-pdf",
+      "theme": "margin_divergence",
+      "factShape": "same market shock -> opposite effects on upstream/downstream participants"
+    },
+    {
+      "kind": "us",
+      "text": "수입 확대 발표 이후 송아지 가격이 하락하면서 농가의 번식 의향이 약화돼 장기적인 소고기 생산 회복 지연 우려",
+      "reportDate": "2026-09-03",
+      "page": 1,
+      "reportOrigin": "user-pdf",
+      "theme": "policy_breeding",
+      "factShape": "trade policy -> calf price -> breeding incentives -> recovery risk"
+    },
+    {
+      "kind": "australia",
+      "text": "호주 육류 수출은 항공화물 운송의 대부분을 여객기 화물칸에 의존, 중동 분쟁에 따른 주요 중동 항공사 운항 중단으로 수출 운송비 상승",
+      "reportDate": "2026-09-17",
+      "page": 1,
+      "reportOrigin": "user-pdf",
+      "theme": "freight_cost",
+      "factShape": "export logistics exposure + route disruption -> higher cost"
+    },
+    {
+      "kind": "australia",
+      "text": "풍부한 목초로 소를 더 키우려는 농가가 출하를 미루는 가운데 생축 구매 경쟁이 이어지며 소 가격 상승",
+      "reportDate": "2026-07-02",
+      "page": 1,
+      "reportOrigin": "public-board",
+      "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040994&dmlType=SELECT",
+      "boardNo": "00040994",
+      "theme": "weather_restocking",
+      "factShape": "pasture conditions -> delayed marketing + buyer competition -> price direction"
+    },
+    {
+      "kind": "domestic",
+      "text": "브라질은 할랄 인증체계를 운영해 전체 소고기 생산량의 약 30%를 할랄 규격으로 생산",
+      "reportDate": "2026-09-17",
+      "page": 1,
+      "reportOrigin": "user-pdf",
+      "theme": "market_structure",
+      "factShape": "country + institution/process + one scale indicator"
+    },
+    {
+      "kind": "us_pork",
+      "text": "출하체중 증가로 돼지고기 생산량이 늘었으나 가공용 수요 약화로 가격 상승 제한",
+      "reportDate": "2026-08-27",
+      "page": 1,
+      "reportOrigin": "user-pdf",
+      "theme": "supply_demand_balance",
+      "factShape": "supply change + demand condition -> price implication"
+    },
+    {
+      "kind": "eu_pork",
+      "text": "돼지 공급 증가와 육류 판매 부진이 수주간 누적되며 유럽 돼지 가격 하락",
+      "reportDate": "2026-10-01",
+      "page": 1,
+      "reportOrigin": "public-board",
+      "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041105&dmlType=SELECT",
+      "boardNo": "00041105",
+      "theme": "supply_demand_balance",
+      "factShape": "sustained surplus + weak sales -> price decline"
+    },
+    {
+      "kind": "domestic_pork",
+      "text": "미국 캘리포니아 동물복지법 무력화 법안을 둘러싸고 중국 소유 육가공업체 특혜 논란",
+      "reportDate": "2026-08-20",
+      "page": 1,
+      "reportOrigin": "user-pdf",
+      "theme": "policy_regulation",
+      "factShape": "country + regulation change + affected industry conflict"
+    },
+    {
+      "kind": "us_chicken",
+      "text": "여름철 야외 바비큐와 스포츠 관람 수요로 닭날개·가슴살 가격은 상승한 반면, 손질이 필요한 통닭의 도매가격은 소폭 하락",
+      "reportDate": "2026-07-23",
+      "page": 2,
+      "reportOrigin": "public-board",
+      "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041014&dmlType=SELECT",
+      "boardNo": "00041014",
+      "theme": "cut_demand_divergence",
+      "factShape": "seasonal consumption driver -> contrasted price changes by product"
+    },
+    {
+      "kind": "us_chicken",
+      "text": "높은 물가 속에서도 단백질 섭취를 유지하려는 소비로 닭고기 수요가 강세를 보이며 타이슨푸드 치킨 부문 영업이익 전망 상향",
+      "reportDate": "2026-05-14",
+      "page": 2,
+      "reportOrigin": "public-board",
+      "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040930&dmlType=SELECT",
+      "boardNo": "00040930",
+      "theme": "protein_substitution_margin",
+      "factShape": "consumer affordability preference -> poultry demand -> company outlook"
+    },
+    {
+      "kind": "brazil_chicken",
+      "text": "EU 당국이 브라질산 가금류의 위생 관련 수출 재개 절차를 수용함에 따라, 중단됐던 EU 시장으로의 닭고기 수출 재개 전망",
+      "reportDate": "2026-09-17",
+      "page": 2,
+      "reportOrigin": "user-pdf",
+      "theme": "market_access",
+      "factShape": "regulator action + compliance procedure -> export resumption outlook"
+    },
+    {
+      "kind": "brazil_chicken",
+      "text": "급여가 지급되는 시기와 개학에 따른 국내 수요 증가로 브라질 닭고기 가격 반등",
+      "reportDate": "2026-08-13",
+      "page": 2,
+      "reportOrigin": "user-pdf",
+      "theme": "seasonal_consumption",
+      "factShape": "payday/school calendar -> domestic demand -> price direction"
+    },
+    {
+      "kind": "domestic_chicken",
+      "text": "프랑스 닭고기 소비량이 전년비 5.6% 늘고 수입량도 10% 증가하며 소비의 절반 이상을 수입에 의존",
+      "reportDate": "2026-10-01",
+      "page": 2,
+      "reportOrigin": "public-board",
+      "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041105&dmlType=SELECT",
+      "boardNo": "00041105",
+      "theme": "import_dependence",
+      "factShape": "country + demand change + domestic supply gap + trade consequence"
+    },
+    {
+      "kind": "us_egg",
+      "text": "조류인플루엔자에 대비한 산란계 증산 후 실제 피해가 예상보다 적어 공급 과잉으로 계란 가격 하락",
+      "reportDate": "2026-10-01",
+      "page": 2,
+      "reportOrigin": "public-board",
+      "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041105&dmlType=SELECT",
+      "boardNo": "00041105",
+      "theme": "precautionary_overproduction",
+      "factShape": "anticipated disease risk -> flock expansion + limited actual loss -> oversupply"
+    },
+    {
+      "kind": "japan_egg",
+      "text": "산란계 사육 회복에도 생산비 상승과 가공용 수요 증가로 일본 계란 가격이 높은 수준 유지",
+      "reportDate": "2026-08-20",
+      "page": 2,
+      "reportOrigin": "user-pdf",
+      "theme": "cost_processing_demand",
+      "factShape": "supply recovery offset by costs/processing demand -> elevated price"
+    },
+    {
+      "kind": "domestic_egg",
+      "text": "일본은 대형농협, 미국은 기업농이 주도하는 등 국가별 계란 유통구조와 가격체계 차이",
+      "reportDate": "2026-08-13",
+      "page": 2,
+      "reportOrigin": "user-pdf",
+      "theme": "distribution_structure",
+      "factShape": "cross-country institutional contrast; must stay about egg market"
+    }
+  ],
+  "sources": [
+    {
+      "name": "USDA / USDA AMS",
+      "kind": [
+        "us",
+        "us_pork",
+        "us_chicken",
+        "us_egg"
+      ],
+      "role": "table-data",
+      "citationEvidence": [
+        {
+          "reportDate": "2026-09-17",
+          "page": 1,
+          "reportOrigin": "user-pdf"
+        },
+        {
+          "reportDate": "2026-09-17",
+          "page": 2,
+          "reportOrigin": "user-pdf"
+        }
+      ],
+      "note": "표 출처이며 인접한 현지동향 문장의 원보도로 단정하지 않음"
+    },
+    {
+      "name": "USMEF",
+      "kind": [
+        "us",
+        "us_pork"
+      ],
+      "role": "table-data",
+      "citationEvidence": [
+        {
+          "reportDate": "2026-09-17",
+          "page": 1,
+          "reportOrigin": "user-pdf"
+        }
+      ],
+      "note": "표 출처이며 인접한 현지동향 문장의 원보도로 단정하지 않음"
+    },
+    {
+      "name": "MLA",
+      "kind": [
+        "australia"
+      ],
+      "role": "table-data",
+      "citationEvidence": [
+        {
+          "reportDate": "2026-09-17",
+          "page": 1,
+          "reportOrigin": "user-pdf"
+        }
+      ],
+      "note": "표 출처이며 인접한 현지동향 문장의 원보도로 단정하지 않음"
+    },
+    {
+      "name": "AHDB",
+      "kind": [
+        "eu_pork"
+      ],
+      "role": "table-data",
+      "citationEvidence": [
+        {
+          "reportDate": "2026-09-17",
+          "page": 1,
+          "reportOrigin": "user-pdf"
+        }
+      ],
+      "note": "표 출처이며 인접한 현지동향 문장의 원보도로 단정하지 않음"
+    },
+    {
+      "name": "CEPEA",
+      "kind": [
+        "brazil_chicken"
+      ],
+      "role": "table-data",
+      "citationEvidence": [
+        {
+          "reportDate": "2026-09-17",
+          "page": 2,
+          "reportOrigin": "user-pdf"
+        }
+      ],
+      "note": "표 출처이며 인접한 현지동향 문장의 원보도로 단정하지 않음"
+    },
+    {
+      "name": "JA전농계란(주)",
+      "kind": [
+        "japan_egg"
+      ],
+      "role": "table-data",
+      "citationEvidence": [
+        {
+          "reportDate": "2026-09-17",
+          "page": 2,
+          "reportOrigin": "user-pdf"
+        }
+      ],
+      "note": "표 출처이며 인접한 현지동향 문장의 원보도로 단정하지 않음"
+    },
+    {
+      "name": "연합뉴스",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_chicken",
+        "domestic_egg",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-09-10",
+          "page": 2,
+          "boardNo": "00041081",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041081&dmlType=SELECT",
+          "articleCitation": "연합뉴스, 9.10.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-07-09",
+          "page": 1,
+          "boardNo": "00041002",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041002&dmlType=SELECT",
+          "articleCitation": "연합뉴스, 7.8.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "뉴시스",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_chicken",
+        "domestic_egg",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-10-01",
+          "page": 1,
+          "boardNo": "00041105",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041105&dmlType=SELECT",
+          "articleCitation": "뉴시스, 10.1.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-09-03",
+          "page": 1,
+          "boardNo": "00041072",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041072&dmlType=SELECT",
+          "articleCitation": "뉴시스, 8.31.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "이데일리",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_chicken",
+        "domestic_egg",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-08-27",
+          "page": 2,
+          "boardNo": "00041060",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041060&dmlType=SELECT",
+          "articleCitation": "이데일리, 8.26.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-07-23",
+          "page": 1,
+          "boardNo": "00041014",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041014&dmlType=SELECT",
+          "articleCitation": "이데일리, 7.20.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "팜인사이트",
+      "aliases": [],
+      "kind": [
+        "domestic"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-09-17",
+          "page": 1,
+          "boardNo": "00041091",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041091&dmlType=SELECT",
+          "articleCitation": "팜인사이트, 9.14.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-08-06",
+          "page": 1,
+          "boardNo": "00041030",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041030&dmlType=SELECT",
+          "articleCitation": "팜인사이트, 8.3.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "한국경제",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_egg",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-07-16",
+          "page": 2,
+          "boardNo": "00041012",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041012&dmlType=SELECT",
+          "articleCitation": "한국경제, 7.13.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-05-21",
+          "page": 1,
+          "boardNo": "00040936",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040936&dmlType=SELECT",
+          "articleCitation": "한국경제, 5.21.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "서울경제",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_egg",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-09-17",
+          "page": 2,
+          "boardNo": "00041091",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041091&dmlType=SELECT",
+          "articleCitation": "서울경제, 9.9.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-06-11",
+          "page": 1,
+          "boardNo": "00040967",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040967&dmlType=SELECT",
+          "articleCitation": "서울경제, 6.7.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "아시아경제",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_chicken",
+        "domestic_egg",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-09-10",
+          "page": 1,
+          "boardNo": "00041081",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041081&dmlType=SELECT",
+          "articleCitation": "아시아경제, 9.7.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-09-10",
+          "page": 1,
+          "boardNo": "00041081",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041081&dmlType=SELECT",
+          "articleCitation": "아시아경제, 9.9.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "미주중앙일보",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_chicken",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-10-01",
+          "page": 1,
+          "boardNo": "00041105",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041105&dmlType=SELECT",
+          "articleCitation": "미주중앙일보, 9.25.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-03-19",
+          "page": 1,
+          "boardNo": "00040851",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040851&dmlType=SELECT",
+          "articleCitation": "미주중앙일보, 3.17.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "미주한국일보",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_chicken",
+        "domestic_egg"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-08-20",
+          "page": 1,
+          "boardNo": "00041052",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041052&dmlType=SELECT",
+          "articleCitation": "미주한국일보, 8.19.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-07-16",
+          "page": 1,
+          "boardNo": "00041012",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041012&dmlType=SELECT",
+          "articleCitation": "미주한국일보, 7.14.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "조선비즈",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-07-16",
+          "page": 1,
+          "boardNo": "00041012",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041012&dmlType=SELECT",
+          "articleCitation": "조선비즈, 7.10.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-06-25",
+          "page": 1,
+          "boardNo": "00040985",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040985&dmlType=SELECT",
+          "articleCitation": "조선비즈, 6.25.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "글로벌이코노믹",
+      "aliases": [
+        "글로이코노믹"
+      ],
+      "kind": [
+        "domestic",
+        "domestic_chicken",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-08-20",
+          "page": 1,
+          "boardNo": "00041052",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041052&dmlType=SELECT",
+          "articleCitation": "글로벌이코노믹, 8.20.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-06-25",
+          "page": 2,
+          "boardNo": "00040985",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040985&dmlType=SELECT",
+          "articleCitation": "글로벌이코노믹, 6.23.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "농민신문",
+      "aliases": [],
+      "kind": [
+        "domestic_chicken",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-10-01",
+          "page": 2,
+          "boardNo": "00041105",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041105&dmlType=SELECT",
+          "articleCitation": "농민신문, 9.26.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-05-14",
+          "page": 2,
+          "boardNo": "00040930",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040930&dmlType=SELECT",
+          "articleCitation": "농민신문, 5.14.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "머니투데이",
+      "aliases": [],
+      "kind": [
+        "domestic_chicken",
+        "domestic_egg",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-07-30",
+          "page": 2,
+          "boardNo": "00041022",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041022&dmlType=SELECT",
+          "articleCitation": "머니투데이, 7.27.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-04-09",
+          "page": 2,
+          "boardNo": "00040869",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040869&dmlType=SELECT",
+          "articleCitation": "머니투데이, 4.6.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "헤럴드경제",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-09-03",
+          "page": 1,
+          "boardNo": "00041072",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041072&dmlType=SELECT",
+          "articleCitation": "헤럴드경제, 8.31.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-06-04",
+          "page": 1,
+          "boardNo": "00040962",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040962&dmlType=SELECT",
+          "articleCitation": "헤럴드경제, 5.30.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "KOTRA 해외시장뉴스",
+      "aliases": [
+        "KOTRA",
+        "KOTRA해외시장뉴스",
+        "해외시장뉴스"
+      ],
+      "kind": [
+        "domestic",
+        "domestic_chicken",
+        "domestic_egg",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-08-20",
+          "page": 2,
+          "boardNo": "00041052",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041052&dmlType=SELECT",
+          "articleCitation": "KOTRA 해외시장뉴스, 8.14.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-07-02",
+          "page": 1,
+          "boardNo": "00040994",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040994&dmlType=SELECT",
+          "articleCitation": "KOTRA, 7.2.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "뉴스핌",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_chicken",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-07-02",
+          "page": 2,
+          "boardNo": "00040994",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040994&dmlType=SELECT",
+          "articleCitation": "뉴스핌, 6.30.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-02-12",
+          "page": 2,
+          "boardNo": "00040809",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040809&dmlType=SELECT",
+          "articleCitation": "뉴스핌, 2.9.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "파이낸셜뉴스",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_chicken",
+        "domestic_egg",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-07-30",
+          "page": 1,
+          "boardNo": "00041022",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041022&dmlType=SELECT",
+          "articleCitation": "파이낸셜뉴스, 7.29.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-07-02",
+          "page": 2,
+          "boardNo": "00040994",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040994&dmlType=SELECT",
+          "articleCitation": "파이낸셜뉴스, 7.1.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "농수축산신문",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-04-16",
+          "page": 1,
+          "boardNo": "00040892",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040892&dmlType=SELECT",
+          "articleCitation": "농수축산신문, 4.14.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-03-26",
+          "page": 1,
+          "boardNo": "00040859",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040859&dmlType=SELECT",
+          "articleCitation": "농수축산신문, 3.23.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "뉴스1",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-01-29",
+          "page": 1,
+          "boardNo": "00040792",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040792&dmlType=SELECT",
+          "articleCitation": "뉴스1, 1.26.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2025-09-04",
+          "page": 1,
+          "boardNo": "00040520",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040520&dmlType=SELECT",
+          "articleCitation": "뉴스1, 9.3.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "동아일보",
+      "aliases": [
+        "동아닷컴"
+      ],
+      "kind": [
+        "domestic",
+        "domestic_egg",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-08-27",
+          "page": 1,
+          "boardNo": "00041060",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041060&dmlType=SELECT",
+          "articleCitation": "동아일보, 8.24.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-05-28",
+          "page": 2,
+          "boardNo": "00040960",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040960&dmlType=SELECT",
+          "articleCitation": "동아일보, 5.28.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "문화일보",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_chicken",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-04-02",
+          "page": 2,
+          "boardNo": "00040867",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040867&dmlType=SELECT",
+          "articleCitation": "문화일보, 3.29.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2025-11-13",
+          "page": 1,
+          "boardNo": "00040593",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040593&dmlType=SELECT",
+          "articleCitation": "문화일보, 11.11.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "조선일보",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_chicken",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-08-06",
+          "page": 2,
+          "boardNo": "00041030",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041030&dmlType=SELECT",
+          "articleCitation": "조선일보, 8.6.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-01-08",
+          "page": 1,
+          "boardNo": "00040760",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040760&dmlType=SELECT",
+          "articleCitation": "조선일보, 1.8.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "매일경제",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_egg",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-05-07",
+          "page": 1,
+          "boardNo": "00040917",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040917&dmlType=SELECT",
+          "articleCitation": "매일경제, 5.3.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-04-30",
+          "page": 2,
+          "boardNo": "00040910",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040910&dmlType=SELECT",
+          "articleCitation": "매일경제, 4.30.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "식품저널",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_chicken",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-05-21",
+          "page": 2,
+          "boardNo": "00040936",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040936&dmlType=SELECT",
+          "articleCitation": "식품저널, 5.19.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2024-09-12",
+          "page": 1,
+          "boardNo": "00040141",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040141&dmlType=SELECT",
+          "articleCitation": "식품저널, 9.9.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "이투데이",
+      "aliases": [],
+      "kind": [
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2025-09-11",
+          "page": 1,
+          "boardNo": "00040526",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040526&dmlType=SELECT",
+          "articleCitation": "이투데이, 9.11.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2024-09-12",
+          "page": 1,
+          "boardNo": "00040141",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040141&dmlType=SELECT",
+          "articleCitation": "이투데이, 9.9.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "중앙일보",
+      "aliases": [],
+      "kind": [
+        "domestic",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2025-02-06",
+          "page": 1,
+          "boardNo": "00040270",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040270&dmlType=SELECT",
+          "articleCitation": "중앙일보, 2.3.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2024-11-21",
+          "page": 1,
+          "boardNo": "00040206",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040206&dmlType=SELECT",
+          "articleCitation": "중앙일보, 11.21.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "한국농어민신문",
+      "aliases": [],
+      "kind": [
+        "domestic_chicken",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-04-09",
+          "page": 2,
+          "boardNo": "00040869",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040869&dmlType=SELECT",
+          "articleCitation": "한국농어민신문, 4.3.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-02-05",
+          "page": 2,
+          "boardNo": "00040798",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040798&dmlType=SELECT",
+          "articleCitation": "한국농어민신문, 2.3.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "인사이드VINA",
+      "aliases": [
+        "INSIDE VINA",
+        "인사이드비나",
+        "인사이트비나"
+      ],
+      "kind": [
+        "domestic_chicken",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-09-17",
+          "page": 2,
+          "boardNo": "00041091",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041091&dmlType=SELECT",
+          "articleCitation": "인사이드VINA, 9.11.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-02-12",
+          "page": 1,
+          "boardNo": "00040809",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040809&dmlType=SELECT",
+          "articleCitation": "인사이트비나, 2.10.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "SBS",
+      "aliases": [],
+      "kind": [
+        "domestic_chicken",
+        "domestic_egg"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-08-13",
+          "page": 2,
+          "boardNo": "00041040",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041040&dmlType=SELECT",
+          "articleCitation": "SBS, 8.12.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-02-26",
+          "page": 2,
+          "boardNo": "00040826",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040826&dmlType=SELECT",
+          "articleCitation": "SBS, 2.23.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "한겨레",
+      "aliases": [],
+      "kind": [
+        "domestic_chicken"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-09-03",
+          "page": 2,
+          "boardNo": "00041072",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041072&dmlType=SELECT",
+          "articleCitation": "한겨레, 9.3.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-01-01",
+          "page": 2,
+          "boardNo": "00040750",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040750&dmlType=SELECT",
+          "articleCitation": "한겨레, 12.31.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "축산경제신문",
+      "aliases": [],
+      "kind": [
+        "domestic_egg",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-09-03",
+          "page": 2,
+          "boardNo": "00041072",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041072&dmlType=SELECT",
+          "articleCitation": "축산경제신문, 8.28.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-08-06",
+          "page": 1,
+          "boardNo": "00041030",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041030&dmlType=SELECT",
+          "articleCitation": "축산경제신문, 7.31.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "데일리NK",
+      "aliases": [],
+      "kind": [
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-09-17",
+          "page": 1,
+          "boardNo": "00041091",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041091&dmlType=SELECT",
+          "articleCitation": "데일리NK, 9.11.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "노컷뉴스",
+      "aliases": [],
+      "kind": [
+        "domestic"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-08-27",
+          "page": 1,
+          "boardNo": "00041060",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041060&dmlType=SELECT",
+          "articleCitation": "노컷뉴스, 8.26.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "포인트경제",
+      "aliases": [],
+      "kind": [
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-08-13",
+          "page": 1,
+          "boardNo": "00041040",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041040&dmlType=SELECT",
+          "articleCitation": "포인트경제, 8.13.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "전자신문",
+      "aliases": [],
+      "kind": [
+        "domestic_egg",
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-08-27",
+          "page": 2,
+          "boardNo": "00041060",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041060&dmlType=SELECT",
+          "articleCitation": "전자신문, 8.28.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2026-04-02",
+          "page": 1,
+          "boardNo": "00040867",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040867&dmlType=SELECT",
+          "articleCitation": "전자신문, 4.2.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "Digital Today",
+      "aliases": [],
+      "kind": [
+        "domestic_egg"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-08-20",
+          "page": 2,
+          "boardNo": "00041052",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00041052&dmlType=SELECT",
+          "articleCitation": "Digital Today, 8.19.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "한국영농신문",
+      "aliases": [],
+      "kind": [
+        "domestic_pork"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2026-06-18",
+          "page": 1,
+          "boardNo": "00040970",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040970&dmlType=SELECT",
+          "articleCitation": "한국영농신문, 6.18.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2025-06-12",
+          "page": 1,
+          "boardNo": "00040406",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00040406&dmlType=SELECT",
+          "articleCitation": "한국영농신문, 6.11.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "농장에서식탁까지",
+      "aliases": [],
+      "kind": [
+        "domestic"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "citationEvidence": [
+        {
+          "reportDate": "2024-03-21",
+          "page": 1,
+          "boardNo": "00039971",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00039971&dmlType=SELECT",
+          "articleCitation": "농장에서식탁까지, 3.18.",
+          "reportOrigin": "public-board"
+        },
+        {
+          "reportDate": "2024-03-07",
+          "page": 1,
+          "boardNo": "00039957",
+          "boardUrl": "https://www.ekapepia.com/v3/board/detail.do?menuSn=28&menuId=28&boardInfoNo=0153&boardNo=00039957&dmlType=SELECT",
+          "articleCitation": "농장에서식탁까지, 3.6.",
+          "reportOrigin": "public-board"
+        }
+      ],
+      "note": "과거 보고서에서 확인한 매체명; 현재 원문 URL·발행일은 검색 후 별도 검증"
+    },
+    {
+      "name": "미국 노동통계국(BLS)",
+      "aliases": [
+        "BLS",
+        "미국노동통계국"
+      ],
+      "kind": [
+        "us",
+        "us_pork",
+        "us_egg"
+      ],
+      "role": "article-search",
+      "discoveryOnly": true,
+      "url": "https://www.bls.gov/cpi/",
+      "urlVerifiedDate": "2026-10-15",
+      "citationEvidence": [
+        {
+          "reportDate": "2026-08-13",
+          "page": 1,
+          "reportOrigin": "user-pdf"
+        }
+      ],
+      "note": "월별 CPI 공식 발표문과 품목별 표 사용; 홈페이지 갱신일을 기사 발행일로 사용하지 않음"
+    }
+  ],
+  "notes": [
+    "예시 검색과 편집 규칙에만 사용하며 과거 수치·사건을 새 주차의 사실로 재사용하지 않음",
+    "소·닭 현지동향은 원인·정책과 수급·가격·업계 영향 등 같은 원문에서 검증된 두 사실을 2줄 이내로 연결",
+    "표의 주간 생산·도축 수치만 반복하는 요약보다 소비·교역·물류·비용·산업구조의 새로운 변화를 우선",
+    "짧은 단일 사실을 억지로 늘리거나 근거 없는 인과·전망을 덧붙이지 않음",
+    "국내기사는 한국어로 보도한 해외 축산시장 기사이며 국가·매체 고정 제한이 아님",
+    "출처 매체명은 검색 풀 확장용이며 현재 접속 가능성이나 개별 기사 URL을 보장하지 않음",
+    "과거 게시물 등록일·보고서 머리말·기사 발행일은 구분하며 현재 검색은 일요일~토요일 주차 필터 유지"
+  ],
+  "exclusions": [
+    {
+      "reportDate": "2026-10-01",
+      "page": 2,
+      "reason": "의학신문 세포배양 백신의 계란 적응 변이 기사는 식용계란 수급·가격과 직접 무관하므로 키워드만으로 모범 선정하지 않음"
+    },
+    {
+      "reportDate": "2026-10-01",
+      "page": 1,
+      "reason": "미국 돼지 문구의 전년比 감소·증가 비교기준 충돌은 원자료 재확인이 필요하며 수치 정답으로 학습하지 않음"
+    },
+    {
+      "reportDate": "2026-09-17",
+      "page": 2,
+      "reason": "예전 보고서에 실린 9.9. 기사는 현재의 해당 주차만 사용 원칙을 완화하는 근거가 아님"
+    },
+    {
+      "reportDate": "2026-09-10",
+      "page": 2,
+      "reason": "LX판토스 인용처럼 불완전한 매체·날짜 표기는 출처를 임의 생성하지 않음"
+    }
+  ]
+}

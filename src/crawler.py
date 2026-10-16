@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
-from io import BytesIO
+from datetime import date, datetime, timedelta, timezone
+from io import BytesIO, StringIO
 from functools import lru_cache
 import base64
+import csv
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
 from tempfile import TemporaryDirectory
+from threading import Lock
 from typing import Any, Callable, Literal
 from urllib.parse import urlencode, urljoin
 from urllib.error import HTTPError
@@ -34,15 +36,18 @@ AHDB_EU_PIG_PRICES_URL = (
 )
 JZ_TAMAGO_EGG_PRICE_URL = "https://www.jz-tamago.co.jp/business/souba/{year:04d}/{month:02d}/{day:02d}/"
 USDA_REPORT_ARCHIVE_URL = "https://mymarketnews.ams.usda.gov/filerepo/reports"
+FRED_US_EGG_CONSUMER_PRICE_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=APU0000708111"
 CEPEA_FRANGO_PRICE_SERIES_URL = "https://cepea.org.br/br/indicador/series/frango.aspx?id=181"
 MLA_STATISTICS_API_URL = "https://api-mlastatistics.mla.com.au"
 MLA_NLRS_SLAUGHTER_EMBED_INFO_URL = (
     "https://app.nlrsreports.mla.com.au/prices-markets/nlrs-slaughter/getembedinfo"
 )
+MLA_EYCI_EMBED_INFO_URL = "https://app.nlrsreports.mla.com.au/indicators/eyci/getembedinfo"
 MLA_POWERBI_ORIGIN = "https://app.powerbi.com"
 REQUEST_TIMEOUT_SECONDS = 60
 USDA_REQUEST_TIMEOUT_SECONDS = 30
 USER_AGENT = "USMEF-Weekly-Market-Report/1.0 (+https://github.com/tjs0408/usmef-news-report)"
+_OCR_INFERENCE_LOCK = Lock()
 
 
 class MlaRecentStatisticsWindowError(RuntimeError):
@@ -92,8 +97,8 @@ def fetch_market_data_for_report_dates(
 
 
 def fetch_usd_krw_exchange_rates(exchange_dates: set[date]) -> dict[date, float]:
-    """네이버 증권의 날짜별 USD/KRW 매매기준율을 반환합니다."""
-    return _fetch_naver_exchange_rates(exchange_dates, "USD")
+    """USD/KRW 매매기준율을 반환하며, 기준일에 값이 없으면 직전 영업일 값을 씁니다."""
+    return _fetch_naver_exchange_rates(exchange_dates, "USD", use_previous_business_day=True)
 
 
 def fetch_eur_krw_exchange_rates(exchange_dates: set[date]) -> dict[date, float]:
@@ -105,17 +110,17 @@ def fetch_eur_krw_exchange_rates(exchange_dates: set[date]) -> dict[date, float]
 
 
 def fetch_jpy_krw_exchange_rates(exchange_dates: set[date]) -> dict[date, float]:
-    """네이버 증권의 날짜별 JPY/KRW 매매기준율(100엔 기준)을 반환합니다."""
-    return _fetch_naver_exchange_rates(exchange_dates, "JPY")
+    """JPY/KRW 매매기준율(100엔 기준)을 반환하며, 누락일은 직전 영업일 값을 씁니다."""
+    return _fetch_naver_exchange_rates(exchange_dates, "JPY", use_previous_business_day=True)
 
 
 def fetch_brl_krw_exchange_rates(exchange_dates: set[date]) -> dict[date, float]:
-    """네이버 증권의 날짜별 BRL/KRW 매매기준율을 반환합니다."""
-    return _fetch_naver_exchange_rates(exchange_dates, "BRL")
+    """BRL/KRW 매매기준율을 반환하며, 기준일에 값이 없으면 직전 영업일 값을 씁니다."""
+    return _fetch_naver_exchange_rates(exchange_dates, "BRL", use_previous_business_day=True)
 
 
 def fetch_aud_krw_exchange_rates(exchange_dates: set[date]) -> dict[date, float]:
-    """네이버 증권의 날짜별 AUD/KRW 매매기준율을 반환합니다."""
+    """AUD/KRW 매매기준율을 반환하며, 기준일에 값이 없으면 직전 영업일 값을 씁니다."""
     return _fetch_naver_exchange_rates(exchange_dates, "AUD", use_previous_business_day=True)
 
 
@@ -131,17 +136,37 @@ def fetch_mla_australia_cattle_data(target_dates: set[date]) -> dict[date, dict[
     slaughter_dates = {item + timedelta(days=1) for item in target_dates}
     slaughter_by_date: dict[date, float] = {item: 0.0 for item in slaughter_dates}
     failures: list[str] = []
-    # 최신 주차는 주별 Statistics API 합계와 화면의 공식 National Count가
-    # 일시적으로 다를 수 있다. 따라서 MLA 화면의 Latest Report에 표시되는
-    # 기준일과 공식 합계를 먼저 읽고, 해당 금요일과 정확히 일치할 때만 쓴다.
-    latest_report_date, latest_report_count = _fetch_mla_nlrs_latest_slaughter_report()
+    # MLA 화면의 ``Latest Week Ending`` 선택 목록은 과거 보고서 날짜도 직접
+    # 고를 수 있다. 화면과 동일한 공개 대시보드 조회를 우선 사용한다. 이전에는
+    # 최신 1주만 이 경로로 읽고, 과거 주차는 Statistics API(/report/10)로
+    # 분리 조회했는데, 이 API가 과거 날짜에도 간헐적으로 5xx를 반환했다.
+    try:
+        dashboard_counts = _fetch_mla_nlrs_slaughter_reports(slaughter_dates)
+    except RuntimeError:
+        # 대시보드 자체가 일시 장애일 때만 기존 공개 API를 보조 경로로 쓴다.
+        dashboard_counts = {}
+
+    # 대시보드에서 아직 선택할 수 없는 미래 기준일을 API로 재조회하지 않도록
+    # 최신 공개 보고일도 확인한다. 이미 대시보드로 모두 읽혔다면 이 요청은 생략한다.
+    missing_dashboard_dates = slaughter_dates - set(dashboard_counts)
+    latest_report_date: date | None = None
+    latest_report_count: float | None = None
+    if missing_dashboard_dates:
+        try:
+            latest_report_date, latest_report_count = _fetch_mla_nlrs_latest_slaughter_report()
+        except RuntimeError:
+            pass
     # MLA의 National Slaughter 엔드포인트는 여러 주차를 한 번에 요청하면
     # HTTP 500을 반환하는 경우가 있어, 주차별로 나누어 안정적으로 조회한다.
     for slaughter_date in sorted(slaughter_dates):
-        if slaughter_date == latest_report_date:
+        dashboard_count = dashboard_counts.get(slaughter_date)
+        if dashboard_count is not None:
+            slaughter_by_date[slaughter_date] = dashboard_count
+            continue
+        if latest_report_date is not None and slaughter_date == latest_report_date and latest_report_count is not None:
             slaughter_by_date[slaughter_date] = latest_report_count
             continue
-        if slaughter_date > latest_report_date:
+        if latest_report_date is not None and slaughter_date > latest_report_date:
             # 다음 주 공식 보고서가 아직 공개되지 않았다. 다음 생성 때 재시도한다.
             continue
         parameters = {
@@ -167,6 +192,7 @@ def fetch_mla_australia_cattle_data(target_dates: set[date]) -> dict[date, dict[
         if recent_window:
             failures.append(f"{slaughter_date.isoformat()} MLA Statistics API의 최근 주차 조회 제한")
 
+    eyci_by_date: dict[date, float] = {}
     try:
         eyci_payload = _download_mla_json(
             "/report/5",
@@ -180,8 +206,20 @@ def fetch_mla_australia_cattle_data(target_dates: set[date]) -> dict[date, dict[
             date.fromisoformat(str(item["calendar_date"])): float(item["indicator_value"])
             for item in eyci_payload.get("data", [])
         }
-    except (KeyError, TypeError, ValueError, OSError) as error:
-        raise RuntimeError("MLA의 Eastern States Young Cattle Indicator를 읽지 못했습니다.") from error
+    except (KeyError, TypeError, ValueError, OSError):
+        # MLA Statistics API의 EYCI 엔드포인트는 정상적인 공개 대시보드와 달리
+        # 간헐적으로 HTTP 502를 돌려준다. 이때는 같은 MLA 공식 EYCI 대시보드의
+        # 공개 Power BI 데이터로 보완한다.
+        eyci_by_date = {}
+
+    missing_eyci_dates = target_dates - set(eyci_by_date)
+    if missing_eyci_dates:
+        try:
+            eyci_by_date.update(_fetch_mla_eyci_dashboard_values(missing_eyci_dates))
+        except RuntimeError:
+            # MLA의 두 공개 경로가 모두 일시 장애인 경우에는 호주 행만 빈칸으로
+            # 남기고, 다음 보고서 생성 때 다시 확인한다.
+            pass
 
     results: dict[date, dict[str, float]] = {}
     for target_date in sorted(target_dates):
@@ -200,6 +238,125 @@ def fetch_mla_australia_cattle_data(target_dates: set[date]) -> dict[date, dict[
     # 최신 주차는 MLA가 아직 공식 집계를 게시하지 않아 HTTP 500을 반환할 수 있다.
     # 이 경우 보고서 전체를 실패시키지 않고, 다음 실행 때 채울 수 있도록 빈 결과를 돌린다.
     return results
+
+
+def _fetch_mla_eyci_dashboard_values(target_dates: set[date]) -> dict[date, float]:
+    """MLA 공식 EYCI 대시보드에서 지정일의 지표값을 읽습니다.
+
+    Statistics API의 ``/report/5``가 502를 반환할 때만 사용하는 보조 경로입니다.
+    MLA 웹페이지가 사용자에게 표시하는 동일한 공개 Power BI 보고서의 차트 데이터를
+    읽으며, 로그인·쿠키·브라우저 자동화는 사용하지 않습니다.
+    """
+    if not target_dates:
+        return {}
+    try:
+        embed_info = _download_json_request(
+            MLA_EYCI_EMBED_INFO_URL,
+            {"Accept": "application/json", "User-Agent": USER_AGENT},
+        )
+        access_token = str(embed_info.get("accessToken", ""))
+        configs = embed_info.get("reportConfig")
+        if not access_token or not isinstance(configs, list) or not configs:
+            raise ValueError("EYCI 대시보드 연결 정보가 없습니다.")
+        report_id = str(configs[0].get("reportId", ""))
+        if not report_id:
+            raise ValueError("EYCI 대시보드 보고서 식별자가 없습니다.")
+
+        cluster_url = _decode_powerbi_cluster_url(access_token).rstrip("/")
+        headers = _mla_powerbi_headers(access_token)
+        model_payload = _download_json_request(
+            f"{cluster_url}/explore/reports/{report_id}/modelsAndExploration?preferReadOnlySession=true",
+            headers,
+        )
+        models = model_payload.get("models")
+        exploration = model_payload.get("exploration")
+        if not isinstance(models, list) or not models or not isinstance(exploration, dict):
+            raise ValueError("EYCI 대시보드 모델을 읽지 못했습니다.")
+
+        source_query: dict[str, Any] | None = None
+        for section in exploration.get("sections", []):
+            for visual in section.get("visualContainers", []):
+                query_text = str(visual.get("query", ""))
+                if all(marker in query_text for marker in (
+                    "Calendar.Date",
+                    "Metrics.Indicator Value",
+                    "Eastern States Young Cattle Indicator",
+                    "BinnedLineSample",
+                )):
+                    source_query = json.loads(query_text)
+                    break
+            if source_query is not None:
+                break
+        if source_query is None:
+            raise ValueError("EYCI 대시보드 차트를 찾지 못했습니다.")
+
+        query_body = {
+            "version": "1.0.0",
+            "queries": [{
+                "Query": source_query,
+                "ApplicationContext": {
+                    "DatasetId": models[0].get("dbName"),
+                    "Sources": [{"ReportId": report_id}],
+                },
+            }],
+            "cancelQueries": [],
+            "modelId": models[0].get("id"),
+        }
+        response = _download_json_request(
+            f"{cluster_url}/explore/querydata?synchronous=true",
+            _mla_powerbi_headers(access_token),
+            json.dumps(query_body).encode("utf-8"),
+        )
+        response_data = response["results"][0]["result"]["data"]
+        descriptor = response_data["descriptor"]
+        selected = descriptor["Select"]
+        # Power BI 응답의 C 배열은 Select 선언 순서가 아니라 그룹 키를 먼저
+        # 배치한다. 차트의 시간축(Calendar.Date)을 첫 열로 복원하기 위해 실제
+        # 응답 열 순서를 계산한다.
+        group_keys = descriptor["Expressions"]["Primary"]["Groupings"][0].get("Keys", [])
+        grouped_select_indexes = [int(item["Select"]) for item in group_keys]
+        select_order = grouped_select_indexes + [
+            index for index in range(len(selected)) if index not in grouped_select_indexes
+        ]
+        date_select_index = next(index for index, item in enumerate(selected) if item.get("Name") == "Calendar.Date")
+        value_select_index = next(index for index, item in enumerate(selected) if item.get("Name") == "Metrics.Indicator Value")
+        date_index = select_order.index(date_select_index)
+        value_index = select_order.index(value_select_index)
+        compact_rows = response_data["dsr"]["DS"][0]["PH"][0]["DM0"]
+    except (IndexError, KeyError, TypeError, ValueError, json.JSONDecodeError, RuntimeError) as error:
+        raise RuntimeError("MLA 공식 EYCI 대시보드에서 값을 읽지 못했습니다.") from error
+
+    values_by_date: dict[date, float] = {}
+    for row in _expand_powerbi_rows(compact_rows, len(selected)):
+        raw_date = row[date_index]
+        raw_value = row[value_index]
+        if raw_date is None or raw_value is None:
+            continue
+        try:
+            report_date = datetime.fromtimestamp(float(raw_date) / 1000, timezone.utc).date()
+            if report_date in target_dates:
+                values_by_date[report_date] = float(raw_value)
+        except (OverflowError, TypeError, ValueError):
+            continue
+    return values_by_date
+
+
+def _expand_powerbi_rows(compact_rows: list[dict[str, Any]], column_count: int) -> list[list[Any]]:
+    """Power BI의 반복값 압축(R bitmask)을 일반 행 구조로 복원합니다."""
+    previous = [None] * column_count
+    rows: list[list[Any]] = []
+    for compact_row in compact_rows:
+        repeated_columns = int(compact_row.get("R", 0))
+        incoming_values = iter(compact_row.get("C", []))
+        row: list[Any] = []
+        for index in range(column_count):
+            if repeated_columns & (1 << index):
+                row.append(previous[index])
+                continue
+            row.append(next(incoming_values, None))
+        previous = row
+        rows.append(row)
+    return rows
 
 
 def fetch_cepea_brazil_chicken_prices(target_dates: set[date]) -> dict[date, float]:
@@ -300,6 +457,35 @@ def fetch_jz_tokyo_egg_prices(target_dates: set[date]) -> dict[date, float]:
             failures.append(f"{target_date.isoformat()}: {error}")
     if failures:
         raise RuntimeError("JA 전농타마고의 도쿄 M란 기준치를 읽지 못했습니다.\n" + "\n".join(failures))
+    return prices
+
+
+def fetch_fred_us_egg_consumer_prices(target_months: set[date]) -> dict[date, float]:
+    """FRED의 미국 도시 평균 대란 소비자가격(달러/12개)을 월별로 반환합니다."""
+    if not target_months:
+        return {}
+    try:
+        response = curl_requests.get(
+            FRED_US_EGG_CONSUMER_PRICE_URL,
+            headers={"Accept": "text/csv", "Referer": "https://fred.stlouisfed.org/series/APU0000708111"},
+            impersonate="chrome",
+            timeout=USDA_REQUEST_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+    except Exception as error:
+        raise RuntimeError("FRED 미국 계란 소비자가격 시계열을 가져오지 못했습니다.") from error
+
+    prices: dict[date, float] = {}
+    try:
+        for row in csv.DictReader(StringIO(response.text)):
+            observation_date = date.fromisoformat(str(row.get("observation_date", "")))
+            if observation_date not in target_months:
+                continue
+            raw_value = str(row.get("APU0000708111", "")).strip()
+            if raw_value not in {"", "."}:
+                prices[observation_date] = float(raw_value)
+    except (TypeError, ValueError, csv.Error) as error:
+        raise RuntimeError("FRED 미국 계란 소비자가격 시계열 형식을 읽지 못했습니다.") from error
     return prices
 
 
@@ -451,8 +637,8 @@ def _fetch_naver_exchange_rates(
             if prior_dates:
                 rates[target_date] = available_rates[max(prior_dates)]
 
-    # 최신 영업일의 환율이 아직 게시되지 않은 경우는 빈 결과로 남긴다.
-    # 호출 측에서 해당 행만 보류하고 다음 생성 때 다시 조회한다.
+    # 대체에 쓸 이전 값도 없는 날짜는 빈 결과로 남긴다. 미래 날짜의 값을
+    # 가져오거나 0으로 채우지 않고, 호출 측에서 해당 행을 보류한다.
     return rates
 
 
@@ -713,6 +899,99 @@ def _decode_powerbi_cluster_url(access_token: str) -> str:
         return str(json.loads(base64.b64decode(padded)) ["clusterUrl"])
     except (IndexError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise RuntimeError("MLA 최신 보고서 연결 정보를 읽지 못했습니다.") from error
+
+
+def _fetch_mla_nlrs_slaughter_reports(report_dates: set[date]) -> dict[date, float]:
+    """MLA NLRS 화면에서 선택 가능한 주차별 전국 소 도축 합계를 읽습니다.
+
+    ``Latest Week Ending`` 필터는 ``Latest Report``뿐 아니라 ``04/09/2026``
+    같은 과거 보고일도 값으로 받는다. 브라우저 화면에서 날짜를 선택하는 것과
+    같은 공개 Power BI 쿼리이므로, 불안정한 Statistics API의 과거 조회를
+    대체한다.
+    """
+    if not report_dates:
+        return {}
+
+    embed_info = _download_json_request(
+        MLA_NLRS_SLAUGHTER_EMBED_INFO_URL,
+        {"Accept": "application/json", "User-Agent": USER_AGENT},
+    )
+    access_token = str(embed_info.get("accessToken", ""))
+    configs = embed_info.get("reportConfig")
+    if not access_token or not isinstance(configs, list) or not configs:
+        raise RuntimeError("MLA 주간 도축 대시보드 접근 정보를 받지 못했습니다.")
+    report_id = str(configs[0].get("reportId", ""))
+    if not report_id:
+        raise RuntimeError("MLA 주간 도축 대시보드 보고서 식별자를 받지 못했습니다.")
+
+    cluster_url = _decode_powerbi_cluster_url(access_token).rstrip("/")
+    model_payload = _download_json_request(
+        f"{cluster_url}/explore/reports/{report_id}/modelsAndExploration?preferReadOnlySession=true",
+        _mla_powerbi_headers(access_token),
+    )
+    models = model_payload.get("models")
+    exploration = model_payload.get("exploration")
+    if not isinstance(models, list) or not models or not isinstance(exploration, dict):
+        raise RuntimeError("MLA 주간 도축 대시보드 데이터 모델을 읽지 못했습니다.")
+
+    source_query: dict[str, Any] | None = None
+    for section in exploration.get("sections", []):
+        for visual in section.get("visualContainers", []):
+            query_text = visual.get("query", "")
+            if not all(marker in query_text for marker in ("Slaughter.Contributor State", "Slaughter Count", "Latest Week Ending")):
+                continue
+            candidate = json.loads(query_text)
+            selected = candidate["Commands"][0]["SemanticQueryDataShapeCommand"]["Query"].get("Select", [])
+            if len(selected) > 5:
+                source_query = candidate
+                break
+        if source_query is not None:
+            break
+    if source_query is None:
+        raise RuntimeError("MLA 주간 도축 대시보드의 전국 합계 표를 찾지 못했습니다.")
+
+    # 표의 Count(합계) 열만 남겨, 날짜별 요청을 가볍게 만든다.
+    command = source_query["Commands"][0]["SemanticQueryDataShapeCommand"]
+    query = command["Query"]
+    query["Select"] = [query["Select"][5]]
+    command["Binding"]["Primary"]["Groupings"][0]["Projections"] = [0]
+
+    def request_body(visual_query: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "version": "1.0.0",
+            "queries": [{
+                "Query": visual_query,
+                "ApplicationContext": {
+                    "DatasetId": models[0].get("dbName"),
+                    "Sources": [{"ReportId": report_id}],
+                },
+            }],
+            "cancelQueries": [],
+            "modelId": models[0].get("id"),
+        }
+
+    results: dict[date, float] = {}
+    for report_date in sorted(report_dates):
+        # 각 호출마다 깊은 복사하여, 이전 날짜의 필터가 다음 날짜에 남지 않게 한다.
+        visual_query = json.loads(json.dumps(source_query))
+        literal = visual_query["Commands"][0]["SemanticQueryDataShapeCommand"]["Query"]["Where"][1]["Condition"]["In"]["Values"][0][0]["Literal"]
+        literal["Value"] = f"'{report_date.strftime('%d/%m/%Y')}'"
+        try:
+            response = _download_json_request(
+                f"{cluster_url}/explore/querydata?synchronous=true",
+                _mla_powerbi_headers(access_token),
+                json.dumps(request_body(visual_query)).encode("utf-8"),
+            )
+            data = response["results"][0]["result"]["data"]["dsr"]["DS"][0]
+            row = data["PH"][0]["DM0"][0]
+            value = row.get("M0", row.get("C", [None])[0])
+            count = float(value)
+            if count > 0:
+                results[report_date] = count
+        except (IndexError, KeyError, TypeError, ValueError, OSError):
+            # 아직 공개되지 않은 보고일은 빈칸으로 두고 다음 생성 시 다시 확인한다.
+            continue
+    return results
 
 
 @lru_cache(maxsize=1)
@@ -1119,8 +1398,19 @@ def _get_ocr() -> RapidOCR:
             "Rec.lang_type": "korean",
             "Rec.model_type": ModelType.MOBILE,
             "Rec.ocr_version": OCRVersion.PPOCRV5,
+            # Multiple OCR sessions with automatic all-core pools compete with
+            # local AI/Excel on this PC. Bounded pools reduce oversubscription.
+            "EngineConfig.onnxruntime.intra_op_num_threads": min(4, os.cpu_count() or 1),
+            "EngineConfig.onnxruntime.inter_op_num_threads": 1,
         }
     )
+
+
+def _run_ocr(image_bytes: bytes):
+    # RapidOCR owns mutable inference/preprocessing state. Reuse it safely when
+    # article/report requests happen at the same time.
+    with _OCR_INFERENCE_LOCK:
+        return _get_ocr()(image_bytes, use_cls=False)
 
 
 def _read_pdf_with_ocr(
@@ -1164,7 +1454,7 @@ def _read_pdf_with_ocr(
             pixmap = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), clip=crop, alpha=False)
             # PNG를 임시 파일로 저장했다가 다시 읽지 않고 메모리에서 바로 전달한다.
             # 뉴스라인은 정방향 PDF이므로 방향 분류 추론도 생략한다.
-            result = _get_ocr()(pixmap.tobytes("png"), use_cls=False)
+            result = _run_ocr(pixmap.tobytes("png"))
             if not result.txts or result.boxes is None:
                 continue
             y_offset = float(crop.y0 * 2)

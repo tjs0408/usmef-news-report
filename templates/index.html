@@ -1,207 +1,1250 @@
+{% from '_sheet_artwork.html' import avatar, sprite %}
 <!doctype html>
 <html lang="ko">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="주간 해외 동향 리포트 Excel 보고서 생성 도구">
+  <meta name="description" content="주간 해외 동향 리포트 Excel 및 한글 보고서 생성 도구">
   <title>주간 해외 동향 리포트</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='20261012-natural-spacing') }}">
 </head>
 <body>
+  <a class="skip-link" href="#workspace-tabs">작업 화면으로 바로가기</a>
   <main class="app-shell">
     <header class="topbar">
       <a class="brand" href="{{ url_for('index') }}" aria-label="주간 해외 동향 리포트 홈">
         <span class="brand-mark" aria-hidden="true">W</span>
         <span><strong>WEEKLY MARKET REPORT</strong><small>해외 축산시장 데이터 관리</small></span>
       </a>
-      <span class="local-badge">LOCAL WORKSPACE</span>
+      <span class="local-badge"><i aria-hidden="true"></i>로컬 작업 공간</span>
     </header>
 
     <section class="hero" aria-labelledby="page-title">
-      <div>
-        <p class="eyebrow">WEEKLY OVERSEAS MARKET INTELLIGENCE</p>
-        <h1 id="page-title">주간 해외 동향 리포트</h1>
-        <p class="hero-copy">기준 Excel 양식의 최신 주차를 채우고, 같은 값을 한글 보고서의 수급·가격 표까지 이어서 현행화합니다.</p>
-        <ul class="hero-highlights" aria-label="리포트 기능 요약">
-          <li><strong>Excel + 한글</strong><span>표 현행화본 제공</span></li>
-          <li><strong>6개 원본</strong><span>시장 데이터 연동</span></li>
-          <li><strong>기존 값 보존</strong><span>빈 주차만 현행화</span></li>
+      <div class="hero-copy-block">
+        <p class="eyebrow">WEEKLY MARKET INTELLIGENCE</p>
+        <h1 id="page-title">한 주의 시장을,<br>하나의 보고서로.</h1>
+        <p class="hero-copy">해외 축산시장 원본 수집부터 Excel·한글 현행화까지.<br>반복 작업은 줄이고, 시장 동향에 집중하세요.</p>
+        <ul class="hero-highlights" aria-label="현재 자동화 범위">
+          <li><strong>{{ active_sheet_count }}개 시트</strong><span>데이터·그래프 연결</span></li>
+          <li><strong>결과물 2종</strong><span>Excel + 한글 HWPX</span></li>
+          <li><strong>기사 초안 12종</strong><span>소·돼지·닭·계란 현지·국내 보도</span></li>
         </ul>
       </div>
       <div class="hero-status" aria-label="현재 자동화 상태">
-        <span class="status-dot" aria-hidden="true"></span><span>현재 양식 자동화 완료</span><strong>자동 10개 시트</strong>
+        <div class="status-line"><span class="status-dot" aria-hidden="true"></span><span>수집 설정</span></div>
+        <strong>{{ active_sheet_count }}개 시트 자동 반영 활성화</strong>
+        <small>{% if cepea_enabled %}브라질 CEPEA 수집 재개 · 접속 실패 시 해당 수집만 보류{% else %}브라질 CEPEA 수집 보류 · 기존 값 유지{% endif %}</small>
+        <span class="status-caption">설정 상태이며 실시간 원본 공개 여부는 생성 시 확인합니다.</span>
       </div>
     </section>
 
-    <section class="dashboard-grid" aria-label="보고서 생성 대시보드">
+    <div class="workspace-navigation">
+      <div id="workspace-tabs" class="workspace-tabs" role="tablist" aria-label="작업 선택">
+        <button id="tab-report" type="button" role="tab" aria-selected="true" aria-controls="workspace-report" data-workspace-tab="report"><span aria-hidden="true">01</span> 보고서 생성</button>
+        <button id="tab-articles" type="button" role="tab" aria-selected="false" aria-controls="workspace-report" tabindex="-1" data-workspace-tab="articles"><span aria-hidden="true">02</span> 기사 초안</button>
+        <button id="tab-sources" type="button" role="tab" aria-selected="false" aria-controls="workspace-report" tabindex="-1" data-workspace-tab="sources"><span aria-hidden="true">03</span> 수집 범위</button>
+      </div>
+      <span class="workspace-hint">주간 해외 동향 리포트</span>
+    </div>
+    <section id="workspace-report" class="dashboard-grid" aria-label="보고서 생성 대시보드" role="tabpanel" aria-labelledby="tab-report" tabindex="0">
       <div class="dashboard-main">
-        <section class="summary-strip" aria-label="현재 보고서 구성">
-          <article class="automation-overview">
-            <span>현재 자동화</span><strong>10 <em>/ 10</em></strong><small>데이터·그래프 시트</small>
-            <div class="coverage-meter" aria-label="10개 시트 자동화 완료"><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i><i class="is-active"></i></div>
+        <section class="overview-grid" data-workspace="report" aria-label="이번 생성 범위">
+          <article class="overview-card output-overview">
+            <span class="overview-icon" aria-hidden="true">01</span>
+            <div><p>요약 보고서</p><strong>2개 시트</strong><small>report · report_육계계란</small></div>
           </article>
-          <article class="source-overview">
-            <span>연동 데이터 원본</span><strong>6개 기관</strong><small>가격·수급·환율 데이터</small>
-            <div class="source-pills" aria-label="연동 데이터 원본 목록"><b>USMEF</b><b>MLA</b><b>AHDB</b><b>JZ</b><b>USDA</b><b>CEPEA</b></div>
+          <article class="overview-card automation-overview">
+            <span class="overview-icon" aria-hidden="true">{{ active_sheet_count }}</span>
+            <div><p>데이터·그래프</p><strong>{{ active_sheet_count }} / 10 연결</strong><small>가격·수급·환율 현행화</small></div>
+            <div class="coverage-meter" aria-label="10개 시트 중 {{ active_sheet_count }}개 수집 활성화">{% for number in range(10) %}<i{% if number < active_sheet_count %} class="is-active"{% endif %}></i>{% endfor %}</div>
           </article>
-          <article class="refresh-overview"><span>갱신 방식</span><strong>신규 주차·그래프 보정</strong><small>입력값은 유지하고 그래프 공백을 동기화</small><div class="refresh-visual" aria-hidden="true"><i></i><i></i><i></i><span>새 데이터</span></div></article>
+          <article class="overview-card hwpx-overview">
+            <span class="overview-icon" aria-hidden="true">HWP</span>
+            <div><p>한글 보고서</p><strong>표 8 · 그래프 8</strong><small>보고일자·비교 색상 반영</small></div>
+          </article>
         </section>
 
-        <section class="content-section" aria-labelledby="sheet-title">
+        <section id="workspace-sources" class="content-section" data-workspace="sources" hidden aria-labelledby="sheet-title">
+          {{ sprite() }}
           <div class="section-heading">
-            <div><p class="section-kicker">REPORT WORKSHEETS</p><h2 id="sheet-title">시트별 데이터 현황</h2><p class="section-description">데이터 수집부터 그래프 반영까지 현재 양식의 자동화 범위를 확인할 수 있습니다.</p></div>
-            <span class="legend"><i class="legend-dot active"></i>자동 입력·동기화</span>
+            <div>
+              <p class="section-kicker">AUTOMATED WORKSHEETS</p>
+              <h2 id="sheet-title">시트별 수집 범위</h2>
+              <p class="section-description">원본이 아직 공개되지 않은 날짜는 빈칸으로 두며, 다음 생성 시 자동으로 다시 확인합니다.</p>
+            </div>
+            <div class="legend" aria-label="상태 범례"><span><i class="legend-dot active"></i>수집 활성화</span><span><i class="legend-dot paused"></i>미공개·접속 실패는 보류</span></div>
           </div>
-          <div class="sheet-grid">
+
+          <div class="sheet-group-heading" id="market-data-heading"><strong>시장데이터 자동입력 · 8개 시트</strong><span>국가·축종별 가격·수급·환율 데이터를 날짜에 맞춰 입력</span></div>
+          <div class="sheet-grid" aria-labelledby="market-data-heading">
             <article class="sheet-card active-sheet">
-              <div class="sheet-card-top"><span class="sheet-icon beef">소</span><span class="sheet-state">자동 입력</span></div>
+              <div class="sheet-card-top">{{ avatar('cow', 'us') }}<span class="sheet-state">자동 입력</span></div>
               <h3>소-미국</h3><p>도축두수, USDA 수정, 컷아웃 가격, USD 환율 및 원화 환산</p><div class="sheet-source">USMEF Korea 뉴스라인</div>
             </article>
             <article class="sheet-card active-sheet">
-              <div class="sheet-card-top"><span class="sheet-icon australia-beef">호</span><span class="sheet-state">자동 입력</span></div>
-              <h3>소-호주</h3><p>주간 소 도축량, EYCI, AUD/KRW 환율 및 원화 환산</p><div class="sheet-source">MLA Statistics API · AUD/KRW 환율</div>
+              <div class="sheet-card-top">{{ avatar('cow', 'au') }}<span class="sheet-state">자동 입력</span></div>
+              <h3>소-호주</h3><p>주간 소 도축량, EYCI, AUD/KRW 환율 및 원화 환산</p><div class="sheet-source">MLA · AUD/KRW 환율</div>
             </article>
             <article class="sheet-card active-sheet">
-              <div class="sheet-card-top"><span class="sheet-icon pork">돼지</span><span class="sheet-state">자동 입력</span></div>
+              <div class="sheet-card-top">{{ avatar('pig', 'us') }}<span class="sheet-state">자동 입력</span></div>
               <h3>돼지-미국</h3><p>도축두수, 수정 전 수치, 컷아웃 가격, USD 환율 및 원화 환산</p><div class="sheet-source">USMEF Korea 뉴스라인</div>
             </article>
             <article class="sheet-card active-sheet">
-              <div class="sheet-card-top"><span class="sheet-icon eu">EU</span><span class="sheet-state">자동 입력</span></div>
+              <div class="sheet-card-top">{{ avatar('pig', 'eu-de') }}<span class="sheet-state">자동 입력</span></div>
               <h3>돼지-EU(독일)</h3><p>독일 지육가격, 유로 환율, 원화 지육가격 및 환산 단가</p><div class="sheet-source">AHDB · EUR/KRW 환율</div>
             </article>
             <article class="sheet-card active-sheet">
-              <div class="sheet-card-top"><span class="sheet-icon us-chicken">닭</span><span class="sheet-state">자동 입력</span></div>
-              <h3>닭-미국</h3><p>주간도축량과 WOG Trading by Size의 주간 가중평균 가격(cents/lb)을 날짜별로 입력</p><div class="sheet-source">USDA Market News · Slug ID 3208 · 3646</div>
+              <div class="sheet-card-top">{{ avatar('chicken', 'us') }}<span class="sheet-state">자동 입력</span></div>
+              <h3>닭-미국</h3><p>주간도축량과 WOG 주간 가중평균 가격을 날짜별로 입력</p><div class="sheet-source">USDA Market News · 3208 · 3646</div>
+            </article>
+            <article class="sheet-card {{ 'active-sheet' if cepea_enabled else 'paused-sheet' }}">
+              <div class="sheet-card-top">{{ avatar('chicken', 'br') }}<span class="sheet-state">{{ '자동 입력' if cepea_enabled else '수집 보류' }}</span></div>
+              <h3>닭-브라질</h3><p>CEPEA 동결 닭고기 가격(R$/kg), BRL 환율 및 원화 환산</p><div class="sheet-source">CEPEA Frango · BRL/KRW</div>
             </article>
             <article class="sheet-card active-sheet">
-              <div class="sheet-card-top"><span class="sheet-icon us-chicken">W</span><span class="sheet-state">자동 동기화</span></div>
-              <h3>미국 육계 그래프(WOG)</h3><p>닭-미국의 WOG 주간 가중평균 가격을 같은 주차 그래프 행에 동기화</p><div class="sheet-source">닭-미국 · USDA Slug ID 3646</div>
-            </article>
-            <article class="sheet-card paused-sheet">
-              <div class="sheet-card-top"><span class="sheet-icon brazil-chicken">브</span><span class="sheet-state">수집 일시 중지</span></div>
-              <h3>닭-브라질</h3><p>CEPEA 봇 탐지 방지를 위해 가격 수집을 잠시 멈춘 상태</p><div class="sheet-source">기존 입력값 유지 · CEPEA 수집 중지</div>
-            </article>
-            <article class="sheet-card paused-sheet">
-              <div class="sheet-card-top"><span class="sheet-icon brazil-chicken">B</span><span class="sheet-state">동기화 중지</span></div>
-              <h3>브라질그래프</h3><p>닭-브라질 수집 재개 전까지 기존 그래프 값을 그대로 유지</p><div class="sheet-source">CEPEA Frango 가격 시리즈 · 중지</div>
+              <div class="sheet-card-top">{{ avatar('egg', 'us') }}<span class="sheet-state">자동 입력</span></div>
+              <h3>계란-미국</h3><p>주간 재고량·Large 평균가격·환율, FRED 월별 소비자가격</p><div class="sheet-source">USDA · FRED · USD/KRW</div>
             </article>
             <article class="sheet-card active-sheet">
-              <div class="sheet-card-top"><span class="sheet-icon us-egg">미</span><span class="sheet-state">자동 입력</span></div>
-              <h3>계란-미국</h3><p>6-Area 주간 재고량, Large 평균가격, USD 환율 및 원화 환산</p><div class="sheet-source">USDA Market News · USD/KRW 환율</div>
+              <div class="sheet-card-top">{{ avatar('egg', 'jp') }}<span class="sheet-state">자동 입력</span></div>
+              <h3>계란-일본</h3><p>도쿄 M란 기준치, JPY 환율 및 원화 환산 가격</p><div class="sheet-source">JA 전농타마고 · JPY/KRW</div>
             </article>
+          </div>
+
+          <div class="sheet-group-heading" id="graph-sync-heading"><strong>그래프 동기화 · 2개 시트</strong><span>수집한 가격 데이터를 그래프용 시트에 반영</span></div>
+          <div class="sheet-grid" aria-labelledby="graph-sync-heading">
             <article class="sheet-card active-sheet">
-              <div class="sheet-card-top"><span class="sheet-icon japan-egg">일</span><span class="sheet-state">자동 입력</span></div>
-              <h3>계란-일본</h3><p>도쿄 M란 기준치, JPY 환율 및 원화 환산 가격</p><div class="sheet-source">JA 전농타마고 · JPY/KRW 환율</div>
+              <div class="sheet-card-top">{{ avatar('chicken', 'us', graph=true) }}<span class="sheet-state">자동 동기화</span></div>
+              <h3>미국 육계 그래프(WOG)</h3><p>닭-미국의 WOG 가격을 같은 주차의 그래프 행에 동기화</p><div class="sheet-source">닭-미국 · USDA 3646</div>
+            </article>
+            <article class="sheet-card {{ 'active-sheet' if cepea_enabled else 'paused-sheet' }}">
+              <div class="sheet-card-top">{{ avatar('chicken', 'br', graph=true) }}<span class="sheet-state">{{ '자동 동기화' if cepea_enabled else '동기화 보류' }}</span></div>
+              <h3>브라질그래프</h3><p>CEPEA 일별 가격 시리즈를 그래프 데이터에 반영</p><div class="sheet-source">CEPEA Frango 가격 시리즈</div>
             </article>
           </div>
         </section>
 
-        <section class="content-section workflow" aria-labelledby="workflow-title">
+        <section class="content-section workflow" data-workspace="report" aria-labelledby="workflow-title">
           <div class="section-heading compact"><div><p class="section-kicker">WEEKLY WORKFLOW</p><h2 id="workflow-title">보고서 생성 흐름</h2></div></div>
           <ol class="workflow-list">
-            <li><span>01</span><div><strong>기준 양식 업로드</strong><p>지난주에 완성한 파일 또는 기준 양식을 선택합니다.</p></div></li>
-            <li><span>02</span><div><strong>신규 주차 및 그래프 데이터 수집</strong><p>빈 주차를 채우고, 연결된 그래프의 누락값도 함께 동기화합니다.</p></div></li>
-            <li><span>03</span><div><strong>완성본 다운로드</strong><p>현행화된 Excel과 한글 표 현행화본을 각각 받습니다.</p></div></li>
+            <li><span>01</span><div><strong>기준 양식 업로드</strong><p>지난주 완성본 또는 기준 Excel 파일을 선택합니다.</p></div></li>
+            <li><span>02</span><div><strong>빈 주차와 원본 확인</strong><p>필요한 날짜만 수집하고, 미공개 원본은 다음 실행 때 재확인합니다.</p></div></li>
+            <li><span>03</span><div><strong>Excel·그래프 반영</strong><p>시트 수식과 연결 그래프를 기존 서식을 유지한 채 갱신합니다.</p></div></li>
+            <li><span>04</span><div><strong>두 결과물 다운로드</strong><p>Excel 현행화본과 한글 HWPX 현행화본을 각각 받습니다.</p></div></li>
           </ol>
+          <div class="workflow-notice"><strong>입력 전 확인</strong><p>기준 파일은 .xlsx, 최대 20MB입니다. 원본이 미공개이거나 접속되지 않으면 일부 항목은 비어 있을 수 있습니다. 결과물은 내려받은 뒤 확인해 주세요.</p></div>
+        </section>
+
+        <section id="workspace-articles" class="content-section article-section" data-workspace="articles" hidden aria-labelledby="article-title">
+          <div class="section-heading compact article-heading">
+            <div>
+              <p class="section-kicker">WEEKLY LIVESTOCK BRIEF</p>
+              <h2 id="article-title">해외 축산 동향 기사 초안</h2>
+              <p class="section-description">소·돼지·닭·계란 총 12개 항목을 찾습니다. 미국 소·미국 닭 현지동향만 65~85자 중심의 최대 두 줄, 호주 소·브라질 닭을 포함한 나머지 10개는 40~50자 중심의 한 줄로 정리합니다. 국내기사 네 항목은 같은 기사를 중복 선정하지 않으며, 중요한 수치·조건을 유지해 ‘지속·시사·전망’ 등 보고체로 끝냅니다.</p>
+            </div>
+          </div>
+          <form id="article-summary-form" class="article-draft-form">
+            <div class="article-draft-toolbar">
+              <label for="article-report-date">보고 기준일<input id="article-report-date" type="date" value="{{ default_report_date }}" required></label>
+              <div class="article-draft-actions">
+                <button id="article-summary-button" type="submit">기사 찾아 초안 만들기</button>
+                <button id="article-copy-button" type="button" class="secondary" disabled>보고서 문구 복사</button>
+              </div>
+            </div>
+            <section class="article-hwpx-panel" aria-labelledby="article-hwpx-title">
+              <div class="article-hwpx-heading">
+                <span class="article-hwpx-step" aria-hidden="true">HWPX</span>
+                <div><h3 id="article-hwpx-title">기사 초안을 한글 보고서에 반영</h3><p>01 보고서 생성에서 내려받은 <strong>가격·표·그래프 현행화 HWPX</strong>를 올려 주세요. 완료된 기사 초안만 원래 위치에 넣고, 미완료 항목의 기존 기사 문구는 지워 빈칸으로 둡니다. 기존 표·그래프는 유지합니다.</p></div>
+              </div>
+              <div class="article-hwpx-controls">
+                <label id="article-hwpx-dropzone" class="article-hwpx-dropzone" for="article-hwpx-file">
+                  <span class="article-hwpx-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4m-4 4 4-4 4 4M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/><path class="article-hwpx-check" d="m5 12 4 4L19 6"/></svg></span>
+                  <span><strong id="article-hwpx-file-title">가격 현행화 한글파일 선택 또는 드래그</strong><span id="article-hwpx-file-name" class="article-hwpx-file-name" hidden></span><small id="article-hwpx-file-hint">.hwpx 형식 · 최대 20MB · 파일 1개</small></span>
+                  <input id="article-hwpx-file" type="file" accept=".hwpx" aria-label="기사 초안을 반영할 가격 현행화 한글파일" aria-describedby="article-hwpx-file-hint article-hwpx-availability">
+                </label>
+                <div class="article-hwpx-action">
+                  <button id="article-hwpx-apply-button" type="button" disabled>기사 반영 한글파일 다운로드</button>
+                  <p id="article-hwpx-availability" aria-live="polite">기사 초안 최소 1개 완료와 HWPX 파일 선택이 필요합니다.</p>
+                  <button id="article-hwpx-clear-button" type="button" class="article-hwpx-clear" hidden>선택 파일 지우기</button>
+                </div>
+              </div>
+              <p class="article-hwpx-note">미국 소·미국 닭 현지동향만 최대 두 줄, 나머지 10개 요약은 한 줄로 반영합니다. 두 줄 항목은 65~85자를 목표로 하되 원문에 필요한 사실만 있으면 더 짧게 작성하며, 모든 현지동향은 최소 40자·최대 95자입니다. 현지동향 8개는 휴먼명조 13pt로 통일하며, 현지동향의 그 외 괄호는 11pt입니다. 국내기사는 제목·매체명·날짜·요약과 모든 괄호까지 중고딕 12pt로 통일하며, 네 제목은 매체·날짜까지 모두 굵게·밑줄을 적용합니다. 한 줄에 이미 맞는 문구는 자간 0을 유지하며, 넘칠 때만 요약은 필요한 최소한으로 -20까지 조정합니다. 국내기사 제목의 중복 매체명은 제거하고, 제목 안의 큰따옴표는 작은따옴표로 표시합니다. 국내기사 제목만 최저 -30까지 허용하며, 그래도 긴 제목은 글자 크기를 줄이거나 자르지 않고 줄바꿈합니다. 두 줄 현지동향의 둘째 줄은 (현지동향) 시작에 맞춥니다. 미완료 항목은 제목·출처·요약을 빈칸으로 반영하며, 원본 파일은 변경하지 않습니다. 구형 .hwp 파일은 .hwpx로 저장 후 올려 주세요.</p>
+              <p id="article-hwpx-status" class="article-hwpx-status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+              <a id="article-hwpx-download" class="article-hwpx-download" hidden>완성 한글파일 다시 다운로드</a>
+            </section>
+            <section id="article-progress" class="article-progress" hidden aria-live="polite" aria-label="기사 초안 진행 상황">
+              <div class="article-progress-heading"><strong id="article-progress-message">기사 후보를 확인하고 있습니다.</strong><span id="article-progress-percent">0%</span></div>
+              <div class="article-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="article-progress-bar"></i></div>
+              <ol class="article-progress-steps">
+                <li data-article-stage="1"><i aria-hidden="true"></i><span>후보 검색</span></li>
+                <li data-article-stage="2"><i aria-hidden="true"></i><span>원문 확인</span></li>
+                <li data-article-stage="3"><i aria-hidden="true"></i><span>AI 초안 작성</span></li>
+              </ol>
+              <p id="article-elapsed-time" class="article-elapsed-time">경과 시간 0초</p>
+              <small class="progress-estimate">검색·요약 처리량 기준이며 완료된 초안부터 표시됩니다. 새로고침하면 기사 작업이 중지되고 화면이 초기화됩니다.</small>
+            </section>
+            <div class="article-source-rule" aria-label="기사 작성 기준">
+              <span>자동 기준</span><strong id="article-search-window" aria-live="polite">해당 주 일요일~토요일 · 지정 매체 우선</strong>
+              <small>국내기사는 NAVER 우선 · 부족하면 Google·공개 뉴스 검색 보완 · 해당 주차의 원문 날짜와 출처 확인</small>
+            </div>
+            {% for group in article_groups %}
+            <section class="livestock-draft-group" aria-labelledby="article-group-{{ loop.index }}">
+              <div class="livestock-group-heading"><h3 id="article-group-{{ loop.index }}">{{ group.label }}</h3><span>현지동향 2 · 국내기사 1</span></div>
+              <div class="article-draft-grid livestock-draft-grid">
+                {% for spec in group.sections %}
+                <article class="article-draft-card" data-article-kind="{{ spec.key }}" data-article-label="{{ spec.label }}" data-article-domestic="{{ 'true' if spec.domestic else 'false' }}">
+                  <div><h4>{{ spec.label }}</h4><p>{% if spec.domestic %}해외 {{ group.label }} 수급·가격·교역을 다룬 한국어 기사{% else %}{{ spec.publisher }} 우선 · 해당 주간 원문을 한국어로 요약{% endif %}</p></div>
+                  <div id="{{ spec.key }}-article-result" class="article-result" aria-live="polite">아직 기사 초안을 실행하지 않았습니다.</div>
+                </article>
+                {% endfor %}
+              </div>
+            </section>
+            {% endfor %}
+          </form>
+          <p id="article-draft-status" class="article-draft-status" aria-live="polite">기사 원문에 없는 사실은 넣지 않으며, 완성 문구는 원문을 열어 확인한 뒤 사용하세요.</p>
+          <p id="article-copy-feedback" class="article-copy-feedback" role="status" aria-live="polite" aria-atomic="true" hidden></p>
         </section>
       </div>
 
-      <aside class="generate-panel" aria-labelledby="generate-title">
+      <aside class="generate-panel" data-workspace="report" aria-labelledby="generate-title">
         <div class="panel-heading">
-          <p class="section-kicker">CREATE REPORT</p><h2 id="generate-title">이번 주 보고서 생성</h2>
-        <p>지난주 완성본을 올리면 최신 빈 주차를 채운 뒤, 동일 주차의 한글 보고서 표 8개도 함께 갱신합니다.</p>
+          <p class="section-kicker">CREATE REPORT</p>
+          <h2 id="generate-title">이번 주 보고서 생성</h2>
+          <p>기준 Excel 파일을 올리세요. 빈 데이터와 연결된 요약 표·그래프를 현행화해 두 가지 결과물로 만듭니다.</p>
         </div>
+
+        <div class="panel-scope" aria-label="이번 생성 결과물">
+          <span><b>Excel</b><small>요약 2 · 데이터·그래프 10</small></span>
+          <span><b>한글 HWPX</b><small>표 8 · 그래프 8</small></span>
+        </div>
+
         <form id="report-form" action="{{ url_for('start_report') }}" method="post" enctype="multipart/form-data">
           <label class="upload-field" for="template-file">
-            <span class="upload-icon" aria-hidden="true">↑</span>
-            <span class="upload-copy"><strong>기준 Excel 파일 선택</strong><small>.xlsx 형식 · 지난주 완성본 사용 가능</small></span>
-            <input id="template-file" name="template_file" type="file" accept=".xlsx" required>
+            <span class="upload-icon" aria-hidden="true">
+              <svg class="upload-icon-default" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4m-4 4 4-4 4 4M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/></svg>
+              <svg class="upload-icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg>
+            </span>
+            <span class="upload-copy"><strong id="upload-title">기준 Excel 파일 선택 또는 드래그</strong><span id="upload-file-name" class="upload-file-name" hidden></span><small id="upload-hint">.xlsx 형식 · 지난주 완성본 · 최대 20MB</small></span>
+            <input id="template-file" name="template_file" type="file" accept=".xlsx" aria-label="기준 Excel 파일" aria-describedby="upload-hint selected-file" required>
           </label>
           <p id="selected-file" class="selected-file" aria-live="polite">선택된 파일이 없습니다.</p>
-          <button id="generate-button" type="submit"><span class="button-label">보고서 생성</span><span class="button-loading" aria-hidden="true">뉴스라인 분석 중…</span><span class="button-arrow" aria-hidden="true">→</span></button>
+          <button id="generate-button" type="submit"><span id="button-label" class="button-label">보고서 생성</span><span class="button-loading" aria-hidden="true">생성 중</span><span class="button-arrow" aria-hidden="true">→</span></button>
         </form>
+
         <section id="progress-panel" class="progress-panel" hidden aria-live="polite">
           <div class="progress-heading"><strong id="progress-message">보고서 생성 준비 중</strong><span id="progress-percent">0%</span></div>
+          <p id="progress-stage-label" class="progress-stage-label">1단계 · 해외 원본과 날짜별 환율을 확인하고 있습니다.</p>
           <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-bar" class="progress-bar"></div></div>
+          <ol class="progress-stages" aria-label="보고서 생성 단계">
+            <li data-stage="2"><i aria-hidden="true"></i><span>원본 수집</span></li>
+            <li data-stage="3"><i aria-hidden="true"></i><span>Excel 반영</span></li>
+            <li data-stage="4"><i aria-hidden="true"></i><span>HWPX 작성</span></li>
+            <li data-stage="5"><i aria-hidden="true"></i><span>완료</span></li>
+          </ol>
           <p id="elapsed-time" class="elapsed-time">경과 시간 0초</p>
         </section>
+
         <section id="download-actions" class="download-actions" hidden aria-live="polite">
-          <div><strong>생성 파일</strong><span id="download-summary">원하는 파일을 선택해 내려받으세요.</span></div>
+          <div class="download-heading"><span class="ready-check" aria-hidden="true">✓</span><div><strong>현행화가 완료되었습니다</strong><span id="download-summary">원하는 파일을 선택해 내려받으세요.</span></div></div>
           <a id="excel-download" class="download-action excel-download" href="#">Excel 현행화본 다운로드 <span aria-hidden="true">↓</span></a>
-          <a id="hwp-download" class="download-action hwp-download" href="#" hidden>한글 보고서 현행화본 다운로드 <span aria-hidden="true">↓</span></a>
+          <a id="hwp-download" class="download-action hwp-download" href="#" hidden>한글 HWPX 현행화본 다운로드 <span aria-hidden="true">↓</span></a>
         </section>
         <p id="status-message" class="status-message" aria-live="polite">.xlsx 기준 파일을 선택한 뒤 생성 버튼을 눌러 주세요.</p>
-        <div class="panel-note"><strong>안내</strong><span>한글 보고서는 표 데이터·제목 날짜와 미국산 지육가격 그래프를 함께 현행화한 HWPX 파일로 제공합니다.</span></div>
+        <div class="panel-note"><strong>알아두기</strong><span>한글 표·그래프와 기사 초안은 별도 작업입니다. 기사 문구는 검토 후 복사해 사용하세요.</span></div>
       </aside>
     </section>
+    <footer class="app-footer"><span>WEEKLY MARKET REPORT</span><p>원본에 근거한 데이터 · 검토를 거친 보고서</p><a href="#page-title">맨 위로 ↑</a></footer>
   </main>
 
   <script>
+    const workspaceTabs = [...document.querySelectorAll("[data-workspace-tab]")];
+    const workspacePanels = [...document.querySelectorAll("[data-workspace]")];
+    const dashboard = document.querySelector(".dashboard-grid");
+    function selectWorkspace(name) {
+      workspaceTabs.forEach((tab) => {
+        const selected = tab.dataset.workspaceTab === name;
+        tab.setAttribute("aria-selected", String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+      });
+      workspacePanels.forEach((panel) => { panel.hidden = panel.dataset.workspace !== name; });
+      dashboard.classList.toggle("is-wide", name !== "report");
+      dashboard.setAttribute("aria-labelledby", `tab-${name}`);
+      // 한 개의 활성 작업 패널만 노출하되 진행 중인 작업과 선택한 파일은 유지한다.
+    }
+    workspaceTabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => selectWorkspace(tab.dataset.workspaceTab));
+      tab.addEventListener("keydown", (event) => {
+        let next;
+        if (event.key === "ArrowRight") next = (index + 1) % workspaceTabs.length;
+        if (event.key === "ArrowLeft") next = (index + workspaceTabs.length - 1) % workspaceTabs.length;
+        if (event.key === "Home") next = 0;
+        if (event.key === "End") next = workspaceTabs.length - 1;
+        if (next === undefined) return;
+        event.preventDefault();
+        workspaceTabs[next].click();
+        workspaceTabs[next].focus();
+      });
+    });
     const form = document.getElementById("report-form");
     const button = document.getElementById("generate-button");
+    const buttonLabel = document.getElementById("button-label");
     const status = document.getElementById("status-message");
     const progressPanel = document.getElementById("progress-panel");
     const progressMessage = document.getElementById("progress-message");
+    const progressStageLabel = document.getElementById("progress-stage-label");
     const progressPercent = document.getElementById("progress-percent");
     const progressTrack = document.querySelector(".progress-track");
     const progressBar = document.getElementById("progress-bar");
     const elapsedTime = document.getElementById("elapsed-time");
     const templateFile = document.getElementById("template-file");
     const selectedFile = document.getElementById("selected-file");
+    const uploadField = document.querySelector(".upload-field");
+    const uploadTitle = document.getElementById("upload-title");
+    const uploadFileName = document.getElementById("upload-file-name");
+    const uploadHint = document.getElementById("upload-hint");
     const downloadActions = document.getElementById("download-actions");
     const excelDownload = document.getElementById("excel-download");
     const hwpDownload = document.getElementById("hwp-download");
     const downloadSummary = document.getElementById("download-summary");
+    const progressStages = [...document.querySelectorAll(".progress-stages li")];
 
-    templateFile.addEventListener("change", () => {
+    const stageLabels = {
+      1: "준비 · 입력 양식 확인",
+      2: "1단계 · 원본 데이터·환율 수집",
+      3: "2단계 · Excel 표·그래프 반영",
+      4: "3단계 · HWPX 표·그래프 작성",
+      5: "완료 · 파일 다운로드 가능"
+    };
+
+    function updateSelectedFile() {
       const file = templateFile.files[0];
-      selectedFile.textContent = file ? `선택됨 · ${file.name}` : "선택된 파일이 없습니다.";
-      selectedFile.classList.toggle("has-file", Boolean(file));
+      const invalid = Boolean(file && (!file.name.toLowerCase().endsWith(".xlsx") || file.size > 20 * 1024 * 1024));
+      const ready = Boolean(file && !invalid);
+      if (invalid) templateFile.value = "";
+      selectedFile.textContent = invalid ? "20MB 이하의 .xlsx 파일을 선택해 주세요." : ready ? `선택됨 · ${file.name}` : "선택된 파일이 없습니다.";
+      selectedFile.classList.toggle("has-file", ready);
+      uploadField.classList.toggle("has-file", ready);
+      uploadField.classList.toggle("is-invalid", invalid);
+      selectedFile.title = ready ? file.name : "";
+      uploadTitle.textContent = invalid ? "파일을 다시 선택해 주세요" : ready ? "Excel 파일 선택 완료" : "기준 Excel 파일 선택 또는 드래그";
+      uploadFileName.textContent = ready ? file.name : "";
+      uploadFileName.title = ready ? file.name : "";
+      uploadFileName.hidden = !ready;
+      const fileSize = ready ? (file.size >= 1024 * 1024 ? `${(file.size / (1024 * 1024)).toLocaleString("ko-KR", { maximumFractionDigits: 1 })} MB` : `${Math.ceil(file.size / 1024)} KB`) : "";
+      uploadHint.textContent = ready ? `${fileSize} · 클릭 또는 드래그로 파일 변경` : ".xlsx 형식 · 지난주 완성본 · 최대 20MB";
+      setStatus(invalid ? "파일 형식 또는 크기를 확인해 주세요." : ready ? "파일이 준비되었습니다. 보고서를 생성해 주세요." : ".xlsx 기준 파일을 선택해 주세요.", invalid ? "is-error" : "");
+    }
+
+    templateFile.addEventListener("change", updateSelectedFile);
+    uploadField.addEventListener("dragover", (event) => {
+      if (!Array.from(event.dataTransfer?.types || []).includes("Files")) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      uploadField.classList.add("is-dragover");
+    });
+    uploadField.addEventListener("dragleave", (event) => {
+      if (!uploadField.contains(event.relatedTarget)) uploadField.classList.remove("is-dragover");
+    });
+    uploadField.addEventListener("dragend", () => uploadField.classList.remove("is-dragover"));
+    uploadField.addEventListener("drop", (event) => {
+      event.preventDefault();
+      uploadField.classList.remove("is-dragover");
+      const files = event.dataTransfer?.files;
+      if (!files?.length) return;
+      if (files.length !== 1) {
+        templateFile.value = "";
+        updateSelectedFile();
+        setStatus("기준 Excel 파일은 한 개만 올려 주세요.", "is-error");
+        return;
+      }
+      templateFile.files = files;
+      templateFile.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
+    function stageForProgress(progress, state = "running", reportedStage = null) {
+      if (state === "completed") return 5;
+      if ([1, 2, 3, 4].includes(Number(reportedStage))) return Number(reportedStage);
+      if (progress >= 83) return 4;
+      if (progress >= 59) return 3;
+      return 2;
+    }
+
+    function updateProgressView(progress, state = "running", reportedStage = null) {
+      const stage = stageForProgress(progress, state, reportedStage);
+      progressStageLabel.textContent = stageLabels[stage];
+      progressPanel.classList.toggle("is-complete", state === "completed");
+      progressPanel.classList.remove("is-error");
+      progressStages.forEach((item) => {
+        const itemStage = Number(item.dataset.stage);
+        item.classList.toggle("is-current", state !== "completed" && itemStage === stage);
+        item.classList.toggle("is-done", state === "completed" || itemStage < stage);
+      });
+      return stage;
+    }
+
+    function progressForStage(progress, stage, state = "running") {
+      // 숫자와 막대 모두 작업 시작부터 완료까지의 동일한 전체 진행률을 사용한다.
+      // 단계별로 0%부터 다시 계산하면 Excel 반영 진입 시 막대 위치가 튀어 보인다.
+      const overall = state === "completed" || stage === 5
+        ? 100
+        : Math.max(0, Math.min(100, progress));
+      return { rail: overall, label: overall };
+    }
+
+    async function readJson(response) {
+      const text = await response.text();
+      if (!text) return {};
+      try { return JSON.parse(text); }
+      catch { return { error: "서버 응답을 읽지 못했습니다. 잠시 후 다시 시도해 주세요." }; }
+    }
+
+    function setStatus(message, tone = "") {
+      status.textContent = message;
+      status.className = `status-message ${tone}`.trim();
+    }
+
+    function formatReportDuration(job) {
+      const total = Math.max(0, Math.round(Number(job.durationSeconds ?? job.elapsedSeconds ?? 0)));
+      return `총 소요 ${total}초`;
+    }
+
     form.addEventListener("submit", async (event) => {
-      event.preventDefault(); button.disabled = true; button.classList.add("is-loading"); progressPanel.hidden = false;
+      event.preventDefault();
+      button.disabled = true;
+      button.classList.add("is-loading");
+      progressPanel.hidden = false;
+      progressPanel.classList.remove("is-complete", "is-error");
       downloadActions.hidden = true;
       hwpDownload.hidden = true;
-      progressMessage.textContent = "데이터 확인을 시작하고 있습니다.";
+      progressMessage.textContent = "보고서 생성 준비 중";
       progressPercent.textContent = "0%";
       progressBar.style.width = "0%";
       progressTrack.setAttribute("aria-valuenow", "0");
       elapsedTime.textContent = "경과 시간 0초";
-      status.textContent = "서버에서 보고서 생성을 시작하고 있습니다.";
+      updateProgressView(0);
+      setStatus("서버에서 보고서 생성을 시작하고 있습니다.");
       const startedAt = Date.now();
-      const elapsedTimer = window.setInterval(() => { elapsedTime.textContent = `경과 시간 ${Math.floor((Date.now() - startedAt) / 1000)}초`; }, 1000);
+      const elapsedTimer = window.setInterval(() => {
+        elapsedTime.textContent = `경과 시간 ${Math.floor((Date.now() - startedAt) / 1000)}초`;
+      }, 1000);
       try {
         const response = await fetch(form.action, { method: "POST", body: new FormData(form) });
-        if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.error || "보고서 생성 작업을 시작하지 못했습니다."); }
-        const { jobId } = await response.json(); await waitForReport(jobId);
-      } catch (error) { status.textContent = `보고서 생성에 실패했습니다: ${error.message}`; }
-      finally { window.clearInterval(elapsedTimer); button.disabled = false; button.classList.remove("is-loading"); }
+        const payload = await readJson(response);
+        if (!response.ok) throw new Error(payload.error || "보고서 생성 작업을 시작하지 못했습니다.");
+        if (!payload.jobId) throw new Error("생성 작업 번호를 받지 못했습니다. 다시 시도해 주세요.");
+        await waitForReport(payload.jobId);
+      } catch (error) {
+        progressPanel.classList.add("is-error");
+        progressMessage.textContent = "보고서 생성에 실패했습니다.";
+        progressStageLabel.textContent = "오류 내용을 확인한 뒤 다시 생성해 주세요.";
+        setStatus(`보고서 생성에 실패했습니다: ${error.message}`, "is-error");
+      } finally {
+        window.clearInterval(elapsedTimer);
+        button.disabled = false;
+        button.classList.remove("is-loading");
+        buttonLabel.textContent = "보고서 생성";
+      }
     });
+
     async function waitForReport(jobId) {
       while (true) {
-        const response = await fetch(`/report-status/${jobId}`); const job = await response.json();
+        const response = await fetch(`/report-status/${jobId}`);
+        const job = await readJson(response);
         if (!response.ok) throw new Error(job.error || "진행 상태를 불러오지 못했습니다.");
-        const progress = Number(job.progress || 0); progressMessage.textContent = job.message; progressPercent.textContent = `${progress}%`; progressBar.style.width = `${progress}%`; progressTrack.setAttribute("aria-valuenow", String(progress));
+        const progress = Number(job.progress || 0);
+        if (Number.isFinite(Number(job.elapsedSeconds))) {
+          elapsedTime.textContent = `경과 시간 ${Math.max(0, Math.round(Number(job.elapsedSeconds)))}초`;
+        }
+        progressMessage.textContent = job.message || "보고서를 만들고 있습니다.";
+        progressMessage.title = progressMessage.textContent;
+        const stage = updateProgressView(progress, job.status, job.stage);
+        const stageProgress = progressForStage(progress, stage, job.status);
+        // 숫자는 작업 시작부터 완료까지의 전체 진행률을 계속 보여 준다.
+        // 막대 위치만 현재 단계와 다음 단계 사이를 부드럽게 잇는다.
+        progressPercent.textContent = `${progress}%`;
+        progressBar.style.width = `${stageProgress.rail}%`;
+        progressTrack.setAttribute("aria-valuenow", String(progress));
         if (job.status === "completed") { showDownloadActions(jobId, job); return; }
-        if (job.status === "failed") throw new Error(job.message);
+        if (job.status === "failed") throw new Error(job.message || "보고서 생성 중 오류가 발생했습니다.");
         await new Promise((resolve) => window.setTimeout(resolve, 1200));
       }
     }
+
     function showDownloadActions(jobId, job) {
       excelDownload.href = `/download-report/${jobId}/excel`;
       hwpDownload.hidden = !job.hwpPath;
       if (job.hwpPath) {
         hwpDownload.href = `/download-report/${jobId}/hwp`;
-        const reportDate = job.hwpReportDate ? ` · 표 기준 ${job.hwpReportDate}` : "";
-        downloadSummary.textContent = `Excel과 그래프를 포함한 한글 보고서 현행화본이 준비되었습니다${reportDate}.`;
-        status.textContent = "생성이 완료되었습니다. 필요한 파일을 선택해 다운로드해 주세요.";
+        const reportDate = job.hwpReportDate ? ` · 보고일자 ${job.hwpReportDate}` : "";
+        downloadSummary.textContent = `Excel·한글 HWPX가 준비되었습니다${reportDate}. 원본 누락이나 그래프 경고가 있는지 확인해 주세요.`;
+        if (job.hwpWarning) setStatus(job.hwpWarning, "is-warning");
+        else
+        setStatus("생성이 완료되었습니다. 필요한 파일을 선택해 다운로드해 주세요.", "is-complete");
       } else {
-        downloadSummary.textContent = "Excel 현행화본이 준비되었습니다. 한글 보고서 현행화본은 이번 실행에서 만들지 못했습니다.";
-        status.textContent = job.hwpWarning || "Excel 보고서 생성이 완료되었습니다.";
+        downloadSummary.textContent = "Excel 현행화본이 준비되었습니다. 한글 HWPX는 이번 실행에서 만들지 못했습니다.";
+        setStatus(job.hwpWarning || "Excel 보고서 생성이 완료되었습니다.", "is-warning");
       }
+      progressMessage.textContent = "현행화 완료";
+      progressPercent.textContent = "100%";
+      progressBar.style.width = "100%";
+      progressTrack.setAttribute("aria-valuenow", "100");
+      updateProgressView(100, "completed");
+      elapsedTime.textContent = formatReportDuration(job);
       downloadActions.hidden = false;
     }
+
+    const articleSummaryForm = document.getElementById("article-summary-form");
+    const articleReportDate = document.getElementById("article-report-date");
+    const articleDraftStatus = document.getElementById("article-draft-status");
+    const articleSummaryButton = document.getElementById("article-summary-button");
+    const articleCopyButton = document.getElementById("article-copy-button");
+    const articleCopyFeedback = document.getElementById("article-copy-feedback");
+    const articleProgress = document.getElementById("article-progress");
+    const articleProgressMessage = document.getElementById("article-progress-message");
+    const articleProgressPercent = document.getElementById("article-progress-percent");
+    const articleProgressTrack = document.querySelector(".article-progress-track");
+    const articleProgressBar = document.getElementById("article-progress-bar");
+    const articleProgressSteps = [...document.querySelectorAll(".article-progress-steps li")];
+    const articleElapsedTime = document.getElementById("article-elapsed-time");
+    const articleSearchWindowLabel = document.getElementById("article-search-window");
+    // 12항목과 원문 근거 검증 규칙이 바뀌었으므로 과거 초안을 자동 재사용하지 않는다.
+    const articleDraftStorageKey = "weekly-overseas-report-livestock-brief-v19-sunday-week-v1";
+    // Per-tab ownership survives reload. No API keys or article bodies here.
+    const articleActiveRequestKey = "weekly-livestock-active-request-v1";
+    const articleSpecs = [...document.querySelectorAll("[data-article-kind]")].map(card => ({
+      key: card.dataset.articleKind, label: card.dataset.articleLabel, domestic: card.dataset.articleDomestic === "true",
+    }));
+    const articleKinds = articleSpecs.map(spec => spec.key);
+    let currentArticleDraft = null;
+    let activeArticleRequest = null;
+    let articlePageLeaving = false;
+    let articleResetting = false;
+    let articleRunController = null;
+    let articlePageVersion = 0;
+    let articleCopyFeedbackTimer = null;
+    let articleCopyFeedbackVersion = 0;
+    let articleCopyInFlight = false;
+
+    function clearArticleCopyFeedback() {
+      articleCopyFeedbackVersion += 1;
+      if (articleCopyFeedbackTimer !== null) window.clearTimeout(articleCopyFeedbackTimer);
+      articleCopyFeedbackTimer = null;
+      articleCopyInFlight = false;
+      articleCopyButton.textContent = "보고서 문구 복사";
+      articleCopyButton.classList.remove("is-copying", "is-copied", "is-copy-error");
+      articleCopyButton.removeAttribute("aria-busy");
+      articleCopyFeedback.hidden = true;
+      articleCopyFeedback.textContent = "";
+      articleCopyFeedback.className = "article-copy-feedback";
+    }
+
+    function showArticleCopyFeedback(state, message) {
+      if (articleCopyFeedbackTimer !== null) window.clearTimeout(articleCopyFeedbackTimer);
+      articleCopyFeedbackTimer = null;
+      articleCopyButton.classList.remove("is-copying", "is-copied", "is-copy-error");
+      articleCopyButton.classList.add(state);
+      articleCopyButton.textContent = state === "is-copied" ? "✓ 복사 완료" : state === "is-copy-error" ? "복사 실패" : "복사 중…";
+      articleCopyFeedback.className = `article-copy-feedback ${state}`;
+      articleCopyFeedback.textContent = message;
+      articleCopyFeedback.hidden = false;
+      if (state !== "is-copying") {
+        const version = articleCopyFeedbackVersion;
+        articleCopyFeedbackTimer = window.setTimeout(() => {
+          if (version === articleCopyFeedbackVersion) clearArticleCopyFeedback();
+        }, state === "is-copy-error" ? 6000 : 4000);
+      }
+    }
+
+    function readActiveArticleRequest() {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(articleActiveRequestKey) || "null");
+        return /^[a-f0-9]{32}$/.test(saved?.requestId || "") ? saved : null;
+      } catch { return null; }
+    }
+
+    function forgetActiveArticleRequest() {
+      try { sessionStorage.removeItem(articleActiveRequestKey); } catch {}
+      activeArticleRequest = null;
+    }
+
+    function resetArticleDraftScreen() {
+      clearArticleCopyFeedback();
+      if (typeof invalidateArticleHwpxApply === "function") invalidateArticleHwpxApply(true);
+      currentArticleDraft = null;
+      articleKinds.forEach(kind => emptyArticleResult(kind, "아직 기사 초안을 실행하지 않았습니다."));
+      articleCopyButton.disabled = true;
+      if (typeof updateArticleHwpxApplyState === "function") updateArticleHwpxApplyState();
+      updateArticleProgress(0, 1, "기사 작업을 초기화했습니다.", "idle");
+      articleProgress.hidden = true;
+      articleElapsedTime.textContent = "경과 시간 0초";
+      setArticleDraftStatus("기사 찾아 초안 만들기를 누르면 보고 기간의 후보를 확인합니다.");
+    }
+
+    async function resetPreviousArticleRequest() {
+      if (!activeArticleRequest || articleResetting) return;
+      const resetVersion = articlePageVersion;
+      const isCurrentReset = () => !articlePageLeaving && resetVersion === articlePageVersion;
+      articleResetting = true;
+      articleSummaryButton.disabled = true;
+      articleReportDate.disabled = true;
+      articleSummaryButton.textContent = "이전 작업 중지 중";
+      resetArticleDraftScreen();
+      updateArticleProgress(0, 1, "새로고침 · 이전 기사 작업 중지 중", "idle");
+      setArticleDraftStatus("진행 중이던 사이트 요청·AI 응답 종료를 기다립니다. 종료 후 다시 시작할 수 있습니다.");
+      try {
+        const response = await fetch("/cancel-article-draft", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestId: activeArticleRequest.requestId }),
+        });
+        const stopped = await readJson(response);
+        if (!isCurrentReset()) return;
+        if (!response.ok) throw new Error(stopped.error || "이전 작업을 중지하지 못했습니다.");
+        let state = stopped.status;
+        while (["running", "cancelling"].includes(state)) {
+          await new Promise(resolve => window.setTimeout(resolve, 1000));
+          if (!isCurrentReset()) return;
+          const statusResponse = await fetch(`/article-draft-status/${stopped.jobId}`);
+          const job = await readJson(statusResponse);
+          if (statusResponse.status === 404) break; // server restarted, no worker
+          if (!statusResponse.ok) throw new Error(job.error || "중지 상태를 확인하지 못했습니다.");
+          state = job.status;
+        }
+        if (!isCurrentReset()) return;
+        forgetActiveArticleRequest();
+        resetArticleDraftScreen();
+        setArticleDraftStatus("이전 기사 작업을 중지하고 초기화했습니다. 새 초안을 시작할 수 있습니다.");
+      } catch (error) {
+        if (isCurrentReset()) {
+          updateArticleProgress(0, 1, "이전 작업 중지 확인 필요", "error");
+          setArticleDraftStatus(`중지 상태를 확인하지 못했습니다: ${error.message} 버튼을 눌러 다시 확인해 주세요.`, "is-error");
+        }
+      } finally {
+        if (isCurrentReset()) {
+          articleResetting = false;
+          articleSummaryButton.disabled = false;
+          articleReportDate.disabled = false;
+          articleSummaryButton.textContent = activeArticleRequest ? "이전 작업 중지 다시 확인" : "기사 찾아 초안 만들기";
+        }
+      }
+    }
+
+    window.addEventListener("pagehide", () => {
+      // Do not cancel on visibilitychange: switching tabs is not a reset.
+      articlePageLeaving = true;
+      articlePageVersion += 1;
+      articleRunController?.abort();
+      if (typeof invalidateArticleHwpxApply === "function") invalidateArticleHwpxApply(true);
+      if (!activeArticleRequest) return;
+      const body = JSON.stringify({ requestId: activeArticleRequest.requestId });
+      const delivered = navigator.sendBeacon?.("/cancel-article-draft", new Blob([body], { type: "application/json" }));
+      if (!delivered) {
+        fetch("/cancel-article-draft", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
+      }
+      // Keep the token: next page retries if the unload request was not delivered.
+    });
+    window.addEventListener("pageshow", (event) => {
+      if (!event.persisted) return;
+      articlePageLeaving = false;
+      articleResetting = false;
+      resetArticleDraftScreen();
+      resetPreviousArticleRequest();
+    });
+
+    function defaultArticleReportDate() {
+      const value = new Date();
+      const offset = (value.getDay() + 3) % 7; // 가장 최근 목요일
+      value.setDate(value.getDate() - offset);
+      return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+    }
+
+    function readArticleDrafts() {
+      try { return JSON.parse(localStorage.getItem(articleDraftStorageKey) || "{}"); }
+      catch { return {}; }
+    }
+
+    function articleSearchWindow(reportDate) {
+      // UTC arithmetic keeps the same calendar week across PC time zones/DST.
+      const selected = new Date(`${reportDate}T00:00:00Z`);
+      if (Number.isNaN(selected.getTime())) return null;
+      const start = new Date(selected);
+      start.setUTCDate(start.getUTCDate() - start.getUTCDay());
+      const end = new Date(start);
+      end.setUTCDate(end.getUTCDate() + 6);
+      return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+    }
+
+    function updateArticleSearchWindow() {
+      const range = articleSearchWindow(articleReportDate.value);
+      articleSearchWindowLabel.textContent = range
+        ? `${range.start.replaceAll("-", ".")}~${range.end.replaceAll("-", ".")} (일~토) · 지정 매체 우선`
+        : "해당 주 일요일~토요일 · 지정 매체 우선";
+    }
+
+    function setArticleDraftStatus(message, tone = "") {
+      articleDraftStatus.textContent = message;
+      articleDraftStatus.className = `article-draft-status ${tone}`.trim();
+    }
+
+    function updateArticleProgress(value, stage, message, state = "running") {
+      const progress = Math.max(0, Math.min(100, Math.round(value)));
+      articleProgress.hidden = false;
+      articleProgress.classList.toggle("is-complete", state === "completed");
+      articleProgress.classList.toggle("is-partial", state === "partial");
+      articleProgress.classList.toggle("is-error", state === "error");
+      articleProgressMessage.textContent = message;
+      articleProgressPercent.textContent = `${progress}%`;
+      articleProgressBar.style.width = `${progress}%`;
+      articleProgressTrack.setAttribute("aria-valuenow", String(progress));
+      articleProgressSteps.forEach((item) => {
+        const itemStage = Number(item.dataset.articleStage);
+        item.classList.toggle("is-current", state === "running" && itemStage === stage);
+        item.classList.toggle("is-done", state === "completed" || itemStage < stage);
+      });
+    }
+
+    function articleResult(kind) {
+      return document.getElementById(`${kind}-article-result`);
+    }
+
+    function formatArticleDate(value) {
+      if (!value) return "발행일 미상";
+      const [year, month, day] = value.split("-");
+      return `${year}.${Number(month)}.${Number(day)}.`;
+    }
+
+    function normalizeArticleMetadata(article) {
+      // Also used for saved drafts: separate explicit publisher labels without
+      // changing the full headline or discarding labels such as [특파원 보고].
+      const title = String(article?.title || "").trim().replace(/\s+/g, " ");
+      const originalPublisher = String(article?.publisher || "").trim().replace(/\s+/g, " ");
+      let publisher = originalPublisher;
+      if (publisher.toLowerCase() === "식품저널 foodnews") publisher = "식품저널";
+      const publisherHost = (value) => {
+        try { return new URL(value.includes("://") ? value : `https://${value}`).hostname.toLowerCase().replace(/^www\./, ""); }
+        catch { return ""; }
+      };
+      if (["인싸잇", "인싸it"].includes(publisher.toLowerCase())
+          || (/^\[\s*인싸(?:잇|it)\s*\]/i.test(title)
+              && [originalPublisher, String(article?.url || "")].some(value => value && publisherHost(value) === "mediawatch.kr"))) {
+        publisher = "인싸잇";
+      }
+      const names = new Set([originalPublisher, publisher].filter(Boolean));
+      if (publisher === "인싸잇") {
+        names.add("인싸it");
+        if (publisherHost(String(article?.url || "")) === "mediawatch.kr") {
+          names.add("mediawatch.kr");
+          names.add("www.mediawatch.kr");
+        }
+      }
+      let cleanTitle = title;
+      if (names.size) {
+        const escaped = [...names].sort((a, b) => b.length - a.length).map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+        cleanTitle = title.replace(new RegExp(`\\s+(?:[-–—−]|\\|)\\s*(?:${escaped})\\s*$`, "i"), "").trimEnd();
+        cleanTitle = cleanTitle.replace(new RegExp(`^\\[\\s*(?:${escaped})\\s*\\]\\s*`, "i"), "").trimStart() || title;
+      }
+      return { ...article, title: cleanTitle, publisher };
+    }
+
+    function formatDomesticArticleTitle(title) {
+      // Report punctuation only; keep saved/source metadata unchanged.
+      return String(title || "").replace(/["“”„‟＂]/g, "'");
+    }
+
+    function emptyArticleResult(kind, message) {
+      articleResult(kind).className = "article-result is-empty";
+      articleResult(kind).textContent = message;
+    }
+
+    function renderArticleResult(kind, item) {
+      const result = articleResult(kind);
+      const article = item?.article ? normalizeArticleMetadata(item.article) : null;
+      if (!article) {
+        const detail = item?.status === "finding" ? "해당 주간의 기사와 원문을 확인하고 있습니다." : item?.errors?.length ? item.errors.join(" ") : "해당 보고 기간의 조건에 맞는 공개 원문을 찾지 못했습니다.";
+        emptyArticleResult(kind, detail);
+        return;
+      }
+      result.className = "article-result";
+      result.replaceChildren();
+      const domestic = Boolean(articleSpecs.find(spec => spec.key === kind)?.domestic);
+      const title = document.createElement("a");
+      title.className = "article-result-title";
+      title.href = article.url;
+      title.target = "_blank";
+      title.rel = "noreferrer";
+      title.textContent = domestic ? formatDomesticArticleTitle(article.title) : article.title;
+      const meta = document.createElement("p");
+      meta.className = "article-result-meta";
+      const method = item.sourceMethod === "search" ? " · 검색 보완" : item.sourceMethod === "official" ? " · 공식 시장보고서 보완" : "";
+      meta.textContent = `${article.publisher} · ${formatArticleDate(article.publishedDate)}${method}`;
+      const summary = document.createElement("p");
+      summary.className = "article-result-summary";
+      const prefix = domestic ? "- " : "- (현지동향) ";
+      summary.textContent = item.summary ? `${prefix}${item.summary}` : (item.status === "summarizing" ? "원문을 한국어 한 줄로 요약하고 있습니다." : item.summaryError || "기사 원문 확인 완료 · 요약 대기 중");
+      const reviewState = document.createElement("span");
+      reviewState.className = `article-review-state ${item.summary ? "is-ready" : "needs-review"}`;
+      reviewState.textContent = item.summary ? "초안 완료 · 원문 검토 필요" : item.status === "summarizing" ? "AI 요약 중" : "후보 확인 · 요약 미완료";
+      result.append(reviewState, title, meta, summary);
+      if (article.sourceExcerpt) {
+        const evidence = document.createElement("details");
+        evidence.className = "article-source-evidence";
+        const label = document.createElement("summary");
+        label.textContent = "요약 근거 원문 보기";
+        const excerpt = document.createElement("p");
+        excerpt.textContent = article.sourceExcerpt;
+        evidence.append(label, excerpt);
+        result.append(evidence);
+      }
+      const candidates = document.createElement("div");
+      candidates.className = "article-candidate-links";
+      const candidateLabel = document.createElement("p");
+      candidateLabel.textContent = "다른 후보 기사";
+      candidates.append(candidateLabel);
+      const candidateList = document.createElement("ul");
+      const seen = new Set([article.url, article.originalUrl].filter(Boolean));
+      for (const candidate of item.candidateLinks || []) {
+        let url;
+        try { url = new URL(candidate.url); } catch { continue; }
+        if (!["http:", "https:"].includes(url.protocol) || seen.has(candidate.url)) continue;
+        seen.add(candidate.url);
+        const row = document.createElement("li");
+        const link = document.createElement("a");
+        link.href = url.href;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        const candidateMetadata = normalizeArticleMetadata(candidate);
+        link.textContent = domestic ? formatDomesticArticleTitle(candidateMetadata.title) : candidateMetadata.title;
+        const date = document.createElement("span");
+        date.textContent = `${candidateMetadata.publisher} · ${formatArticleDate(candidate.publishedDate)}`;
+        row.append(link, date);
+        candidateList.append(row);
+        if (candidateList.children.length === 2) break;
+      }
+      if (candidateList.children.length) {
+        candidates.append(candidateList);
+      } else {
+        const unavailable = document.createElement("span");
+        unavailable.textContent = item.candidateLinksStatus === "finding" ? "같은 주차의 다른 후보를 확인하고 있습니다." : "같은 주차의 추가 후보를 확보하지 못했습니다.";
+        candidates.append(unavailable);
+      }
+      result.append(candidates);
+    }
+
+    function renderArticleSummary(payload) {
+      if (payload !== currentArticleDraft && typeof invalidateArticleHwpxApply === "function") invalidateArticleHwpxApply();
+      currentArticleDraft = payload;
+      articleKinds.forEach((kind) => renderArticleResult(kind, payload.sections?.[kind]));
+      articleCopyButton.disabled = !buildArticleBriefing(payload);
+      if (typeof updateArticleHwpxApplyState === "function") updateArticleHwpxApplyState();
+    }
+
+    function loadArticleDraft() {
+      clearArticleCopyFeedback();
+      if (typeof invalidateArticleHwpxApply === "function") invalidateArticleHwpxApply(true);
+      updateArticleSearchWindow();
+      const drafts = readArticleDrafts();
+      const saved = drafts[articleReportDate.value];
+      const range = articleSearchWindow(articleReportDate.value);
+      if (saved && saved.weekStart === range?.start && saved.weekEnd === range?.end) {
+        renderArticleSummary(saved);
+        const savedReady = articleKinds.filter(kind => saved.sections?.[kind]?.summary).length;
+        setArticleDraftStatus(`${articleReportDate.value} 기준 저장 초안 ${savedReady}/${articleKinds.length}건을 불러왔습니다.`, savedReady === articleKinds.length ? "is-complete" : savedReady ? "is-partial" : "is-error");
+        return;
+      }
+      articleKinds.forEach((kind) => emptyArticleResult(kind, "아직 기사 초안을 실행하지 않았습니다."));
+      currentArticleDraft = null;
+      articleCopyButton.disabled = true;
+      if (typeof updateArticleHwpxApplyState === "function") updateArticleHwpxApplyState();
+      setArticleDraftStatus("기사 찾아 초안 만들기를 누르면 보고 기간의 후보를 확인합니다.");
+    }
+
+    function saveArticleDraft(payload) {
+      const drafts = readArticleDrafts();
+      drafts[articleReportDate.value] = payload;
+      try { localStorage.setItem(articleDraftStorageKey, JSON.stringify(drafts)); }
+      catch { setArticleDraftStatus("초안은 작성됐지만 브라우저에 저장하지 못했습니다. 화면에서 문구를 확인해 주세요.", "is-error"); }
+    }
+
+    function buildArticleBriefing(payload) {
+      const lines = [];
+      articleSpecs.forEach(spec => {
+        const section = payload?.sections?.[spec.key];
+        if (!section?.summary) return;
+        if (spec.domestic && section.article) {
+          const article = normalizeArticleMetadata(section.article);
+          const shortDate = article.publishedDate.split("-").slice(1).map(Number).join(".") + ".";
+          lines.push(`○ ${spec.label}\n∙ “${formatDomesticArticleTitle(article.title)}”(${article.publisher},${shortDate})\n- ${section.summary}`);
+        } else if (!spec.domestic) {
+          lines.push(`○ ${spec.label}\n- (현지동향) ${section.summary}`);
+        }
+      });
+      return lines.join("\n\n");
+    }
+
+    async function copyArticleBriefing() {
+      if (articleCopyInFlight) return;
+      clearArticleCopyFeedback();
+      const briefing = buildArticleBriefing(currentArticleDraft);
+      if (!briefing) {
+        showArticleCopyFeedback("is-copy-error", "복사할 초안이 없습니다. 기사 초안을 먼저 완성해 주세요.");
+        setArticleDraftStatus("자동 초안이 완료된 항목이 있어야 보고서 문구를 복사할 수 있습니다.", "is-error");
+        return;
+      }
+      const version = articleCopyFeedbackVersion;
+      const copiedDraft = currentArticleDraft;
+      const isCurrentCopy = () => version === articleCopyFeedbackVersion && copiedDraft === currentArticleDraft && !articlePageLeaving;
+      articleCopyInFlight = true;
+      articleCopyButton.setAttribute("aria-busy", "true");
+      showArticleCopyFeedback("is-copying", "보고서 문구를 복사하고 있습니다.");
+      try {
+        await navigator.clipboard.writeText(briefing);
+        if (!isCurrentCopy()) return;
+        showArticleCopyFeedback("is-copied", "✓ 보고서 문구를 복사했습니다.");
+        setArticleDraftStatus("완료된 항목의 보고서 문구를 축종별 순서로 복사했습니다.", "is-complete");
+      } catch (error) {
+        if (!isCurrentCopy()) return;
+        showArticleCopyFeedback("is-copy-error", "복사 실패 · 브라우저의 클립보드 권한을 확인해 주세요.");
+        setArticleDraftStatus("브라우저가 복사를 허용하지 않았습니다. HTTPS 또는 최신 브라우저에서 다시 시도해 주세요.", "is-error");
+      } finally {
+        if (version === articleCopyFeedbackVersion) {
+          articleCopyInFlight = false;
+          articleCopyButton.removeAttribute("aria-busy");
+        }
+      }
+    }
+
+    articleReportDate.value = articleReportDate.value || defaultArticleReportDate();
+    updateArticleSearchWindow();
+    articleSummaryForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (articleResetting || articleSummaryButton.disabled) return;
+      if (activeArticleRequest) { await resetPreviousArticleRequest(); return; }
+      clearArticleCopyFeedback();
+      if (typeof invalidateArticleHwpxApply === "function") invalidateArticleHwpxApply();
+      articlePageLeaving = false;
+      articleRunController = new AbortController();
+      const runVersion = articlePageVersion;
+      const isCurrentRun = () => !articlePageLeaving && runVersion === articlePageVersion;
+      articleSummaryButton.disabled = true;
+      articleCopyButton.disabled = true;
+      articleReportDate.disabled = true;
+      articleSummaryButton.textContent = "기사 확인·초안 작성 중";
+      const articleStartedAt = performance.now();
+      const elapsedSeconds = () => Math.max(0, Math.floor((performance.now() - articleStartedAt) / 1000));
+      articleElapsedTime.textContent = "경과 시간 0초";
+      const articleElapsedTimer = window.setInterval(() => {
+        if (!isCurrentRun()) return;
+        articleElapsedTime.textContent = `경과 시간 ${elapsedSeconds()}초`;
+      }, 1000);
+      let progress = 0;
+      let targetProgress = 0;
+      let serverStage = 1;
+      let serverMessage = "12개 항목의 주간 기사 후보를 찾고 있습니다.";
+      const animateArticleProgress = () => {
+        if (!isCurrentRun()) return;
+        progress = Math.min(targetProgress, progress + Math.max(.2, (targetProgress - progress) * .25));
+        updateArticleProgress(progress, serverStage, serverMessage);
+      };
+      updateArticleProgress(progress, 1, serverMessage);
+      const progressTimer = window.setInterval(animateArticleProgress, 300);
+      currentArticleDraft = null;
+      if (typeof updateArticleHwpxApplyState === "function") updateArticleHwpxApplyState();
+      articleKinds.forEach(kind => emptyArticleResult(kind, "해당 주간의 기사와 원문을 확인하고 있습니다."));
+      setArticleDraftStatus("지정 매체의 해당 주간 기사부터 확인하고, 없으면 검색으로 보완합니다. 완료된 초안부터 표시됩니다.");
+      let terminal = false;
+      try {
+        const ownedRequest = { requestId: crypto.randomUUID().replaceAll("-", ""), reportDate: articleReportDate.value };
+        // Persist BEFORE starting: a reload before the 202 response still cancels.
+        sessionStorage.setItem(articleActiveRequestKey, JSON.stringify(ownedRequest));
+        activeArticleRequest = ownedRequest;
+        const response = await fetch("/start-article-draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(ownedRequest), signal: articleRunController.signal,
+        });
+        const started = await readJson(response);
+        if (!isCurrentRun()) return;
+        if (!response.ok) {
+          terminal = response.status >= 400 && response.status < 500;
+          throw new Error(started.error || "기사 초안 작성을 시작하지 못했습니다.");
+        }
+        let payload;
+        let previousSections = "";
+        while (true) {
+          const statusResponse = await fetch(`/article-draft-status/${started.jobId}`, { signal: articleRunController.signal });
+          const job = await readJson(statusResponse);
+          if (!isCurrentRun()) return;
+          if (!statusResponse.ok) throw new Error(job.error || "기사 초안 상태를 확인하지 못했습니다.");
+          targetProgress = Math.max(targetProgress, Number(job.progress) || 0);
+          serverStage = Number(job.stage) || 1;
+          serverMessage = job.message || serverMessage;
+          const snapshot = JSON.stringify(job.sections || {});
+          if (snapshot !== previousSections) {
+            renderArticleSummary({ reportDate: articleReportDate.value, sections: job.sections || {} });
+            previousSections = snapshot;
+          }
+          if (job.status === "completed") { terminal = true; payload = job.result; break; }
+          if (job.status === "failed") { terminal = true; throw new Error(job.message); }
+          if (job.status === "cancelled") { terminal = true; resetArticleDraftScreen(); return; }
+          if (job.status === "cancelling") { await resetPreviousArticleRequest(); return; }
+          await new Promise(resolve => window.setTimeout(resolve, 1000));
+          if (!isCurrentRun()) return;
+        }
+        saveArticleDraft(payload);
+        renderArticleSummary(payload);
+        const readyCount = articleKinds.filter(kind => payload.sections?.[kind]?.summary).length;
+        const completionMessage = `기사 확인 종료 · 초안 ${readyCount}/${articleKinds.length}건 완료`;
+        const completionState = readyCount === articleKinds.length ? "completed" : readyCount ? "partial" : "error";
+        updateArticleProgress(100, 3, payload.message || completionMessage, completionState);
+        setArticleDraftStatus(payload.message || completionMessage, readyCount === articleKinds.length ? "is-complete" : readyCount ? "is-partial" : "is-error");
+      } catch (error) {
+        if (isCurrentRun()) {
+          updateArticleProgress(progress, serverStage, error.message || "기사 초안 작성 중 오류가 발생했습니다.", "error");
+          setArticleDraftStatus(`기사 초안 작성에 실패했습니다: ${error.message}`, "is-error");
+        }
+      } finally {
+        window.clearInterval(progressTimer);
+        window.clearInterval(articleElapsedTimer);
+        if (isCurrentRun()) {
+          if (terminal) forgetActiveArticleRequest();
+          articleElapsedTime.textContent = `총 소요 ${elapsedSeconds()}초`;
+          articleSummaryButton.disabled = false;
+          articleCopyButton.disabled = !buildArticleBriefing(currentArticleDraft);
+          articleReportDate.disabled = false;
+          articleSummaryButton.textContent = activeArticleRequest ? "이전 작업 중지 다시 확인" : "기사 찾아 초안 만들기";
+          if (typeof updateArticleHwpxApplyState === "function") updateArticleHwpxApplyState();
+        }
+      }
+    });
+    articleReportDate.addEventListener("change", loadArticleDraft);
+    articleCopyButton.addEventListener("click", copyArticleBriefing);
+
+    // Article HWPX integration: uploads a copy, never reruns search or AI.
+    const articleHwpxInput = document.getElementById("article-hwpx-file");
+    const articleHwpxDropzone = document.getElementById("article-hwpx-dropzone");
+    const articleHwpxFileTitle = document.getElementById("article-hwpx-file-title");
+    const articleHwpxFileName = document.getElementById("article-hwpx-file-name");
+    const articleHwpxFileHint = document.getElementById("article-hwpx-file-hint");
+    const articleHwpxAvailability = document.getElementById("article-hwpx-availability");
+    const articleHwpxApplyButton = document.getElementById("article-hwpx-apply-button");
+    const articleHwpxClearButton = document.getElementById("article-hwpx-clear-button");
+    const articleHwpxStatus = document.getElementById("article-hwpx-status");
+    const articleHwpxDownload = document.getElementById("article-hwpx-download");
+    let selectedArticleHwpxFile = null;
+    let articleHwpxApplyVersion = 0;
+    let articleHwpxApplyController = null;
+    let articleHwpxApplying = false;
+    let articleHwpxDownloadUrl = null;
+
+    function articleHwpxReadyItem(payload, kind) {
+      const item = payload?.sections?.[kind];
+      if (item?.status !== "completed" || typeof item.summary !== "string" || !item.summary.trim()) return false;
+      const spec = articleSpecs.find(spec => spec.key === kind);
+      return !spec?.domestic || (typeof item.article?.title === "string" && item.article.title.trim()
+        && typeof item.article?.publisher === "string" && item.article.publisher.trim()
+        && /^\d{4}-\d{2}-\d{2}$/.test(item.article?.publishedDate || ""));
+    }
+
+    function articleHwpxReadyCount(payload) {
+      return articleKinds.filter(kind => articleHwpxReadyItem(payload, kind)).length;
+    }
+
+    function articleHwpxInvalidCompleted(payload) {
+      return articleKinds.some(kind => {
+        const item = payload?.sections?.[kind];
+        return item?.status === "completed" && item.summary !== null && item.summary !== undefined
+          && item.summary !== "" && !articleHwpxReadyItem(payload, kind);
+      });
+    }
+
+    function articleHwpxUnfinishedWork(payload) {
+      const terminal = ["completed", "no_article", "source_error", "summary_error", "model_unavailable", "missing"];
+      return ["running", "finding", "summarizing", "cancelling", "cancelled", "draining"].includes(payload?.status)
+        || articleKinds.some(kind => payload?.sections && kind in payload.sections
+          && !terminal.includes(payload.sections[kind]?.status));
+    }
+
+    function articleHwpxCountMessage(applied, blank = articleKinds.length - applied) {
+      return `기사 ${applied}개 반영 · 미완료 ${blank}개 빈칸`;
+    }
+
+    function articleHwpxResponseCounts(response, fallbackApplied) {
+      const readCount = name => {
+        const value = response.headers?.get(name);
+        return typeof value === "string" && /^\d+$/.test(value) ? Number(value) : null;
+      };
+      const applied = readCount("X-Article-Applied-Count");
+      const blank = readCount("X-Article-Blank-Count");
+      return applied !== null && blank !== null && applied >= 1 && applied <= articleKinds.length
+        && blank >= 0 && applied + blank === articleKinds.length
+        ? { applied, blank } : { applied: fallbackApplied, blank: articleKinds.length - fallbackApplied };
+    }
+
+    function updateArticleHwpxApplyState() {
+      const ready = articleHwpxReadyCount(currentArticleDraft);
+      const matchesDate = currentArticleDraft?.reportDate === articleReportDate.value;
+      const working = articleResetting || articlePageLeaving || !!activeArticleRequest || articleSummaryButton.disabled
+        || articleHwpxUnfinishedWork(currentArticleDraft);
+      const invalidCompleted = articleHwpxInvalidCompleted(currentArticleDraft);
+      const canApply = articleKinds.length === 12 && ready >= 1 && matchesDate && !working && !invalidCompleted && selectedArticleHwpxFile;
+      articleHwpxApplyButton.disabled = articleHwpxApplying || !canApply;
+      articleHwpxInput.disabled = articleHwpxApplying;
+      articleHwpxClearButton.disabled = articleHwpxApplying;
+      articleHwpxDropzone.classList.toggle("is-applying", articleHwpxApplying);
+      articleHwpxApplyButton.textContent = articleHwpxApplying ? "한글파일에 기사 반영 중…" : "기사 반영 한글파일 다운로드";
+      articleHwpxApplyButton.setAttribute("aria-busy", String(articleHwpxApplying));
+      const counts = articleHwpxCountMessage(ready);
+      articleHwpxAvailability.textContent = articleHwpxApplying ? `${counts} · 한글파일에 반영하고 있습니다.`
+        : working ? "기사 작업이 끝나면 완료 초안을 반영할 수 있습니다."
+        : !matchesDate ? "선택한 보고 기준일의 기사 초안이 필요합니다."
+        : invalidCompleted ? "완료된 기사 초안의 문구·제목·매체·발행일 정보를 확인해 주세요."
+        : ready === 0 ? "기사 초안 0/12개 완료 · 최소 1개 완료 후 반영할 수 있습니다."
+        : !selectedArticleHwpxFile ? `${counts} · 가격 현행화 HWPX 파일을 선택해 주세요.`
+        : `${counts} · 새 한글파일로 다운로드합니다.`;
+    }
+
+    function showArticleHwpxStatus(message, tone = "") {
+      articleHwpxStatus.textContent = message;
+      articleHwpxStatus.className = `article-hwpx-status ${tone}`.trim();
+      articleHwpxStatus.hidden = !message;
+    }
+
+    function invalidateArticleHwpxApply(clearFile = false) {
+      articleHwpxApplyVersion += 1;
+      articleHwpxApplyController?.abort();
+      articleHwpxApplyController = null;
+      articleHwpxApplying = false;
+      if (articleHwpxDownloadUrl) URL.revokeObjectURL(articleHwpxDownloadUrl);
+      articleHwpxDownloadUrl = null;
+      articleHwpxDownload.hidden = true;
+      articleHwpxDownload.removeAttribute("href");
+      articleHwpxDownload.removeAttribute("download");
+      showArticleHwpxStatus("");
+      if (clearFile) {
+        selectedArticleHwpxFile = null;
+        articleHwpxInput.value = "";
+        renderArticleHwpxFile();
+      }
+      updateArticleHwpxApplyState();
+    }
+
+    function renderArticleHwpxFile(error = "") {
+      const file = selectedArticleHwpxFile;
+      articleHwpxDropzone.classList.toggle("has-file", !!file);
+      articleHwpxDropzone.classList.toggle("is-invalid", !!error);
+      articleHwpxInput.setAttribute("aria-invalid", String(!!error));
+      articleHwpxFileTitle.textContent = file ? "한글파일 선택 완료" : error ? "파일을 다시 선택해 주세요" : "가격 현행화 한글파일 선택 또는 드래그";
+      articleHwpxFileName.textContent = file?.name || "";
+      articleHwpxFileName.title = file?.name || "";
+      articleHwpxFileName.hidden = !file;
+      const size = file ? (file.size >= 1024 * 1024 ? `${Number((file.size / (1024 * 1024)).toFixed(1))} MB` : `${Math.max(1, Math.round(file.size / 1024))} KB`) : "";
+      articleHwpxFileHint.textContent = file ? `${size} · 클릭 또는 드래그로 파일 변경` : ".hwpx 형식 · 최대 20MB · 파일 1개";
+      articleHwpxClearButton.hidden = !file;
+      if (error) showArticleHwpxStatus(error, "is-error");
+      updateArticleHwpxApplyState();
+    }
+
+    function selectArticleHwpxFiles(files) {
+      if (articleHwpxApplying) return;
+      invalidateArticleHwpxApply();
+      const chosen = [...(files || [])];
+      selectedArticleHwpxFile = null;
+      let error = "";
+      if (chosen.length > 1) error = "한글파일은 한 개만 올려 주세요.";
+      else if (chosen.length) {
+        const file = chosen[0];
+        if (!/\.hwpx$/i.test(file.name)) error = /\.hwp$/i.test(file.name)
+          ? "구형 .hwp 파일은 지원하지 않습니다. 한글의 ‘다른 이름으로 저장’에서 .hwpx로 저장한 뒤 올려 주세요."
+          : "가격 현행화 한글파일(.hwpx)을 선택해 주세요.";
+        else if (!file.size || file.size > 20 * 1024 * 1024) error = "내용이 있는 20MB 이하 HWPX 파일을 선택해 주세요.";
+        else selectedArticleHwpxFile = file;
+      }
+      if (!selectedArticleHwpxFile) articleHwpxInput.value = "";
+      renderArticleHwpxFile(error);
+    }
+
+    function articleHwpxDownloadName(response, reportDate) {
+      const disposition = response.headers?.get("Content-Disposition") || "";
+      let name = "";
+      const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const plain = disposition.match(/filename="([^"]+)"|filename=([^;]+)/i);
+      try { name = encoded ? decodeURIComponent(encoded[1]) : plain ? (plain[1] || plain[2]).trim() : ""; } catch {}
+      name = name.replace(/[\\/\r\n:*?"<>|]/g, "_");
+      return /\.hwpx$/i.test(name) ? name : `주간_해외_수급_및_가격_동향_기사반영_${reportDate.replaceAll("-", "")}.hwpx`;
+    }
+
+    async function applyArticleHwpx() {
+      updateArticleHwpxApplyState();
+      if (articleHwpxApplyButton.disabled) return;
+      invalidateArticleHwpxApply();
+      const draft = currentArticleDraft;
+      const requestedReady = articleHwpxReadyCount(draft);
+      const reportDate = articleReportDate.value;
+      const selectedFile = selectedArticleHwpxFile;
+      const version = articleHwpxApplyVersion;
+      const controller = new AbortController();
+      const isCurrent = () => version === articleHwpxApplyVersion && draft === currentArticleDraft
+        && reportDate === articleReportDate.value && selectedFile === selectedArticleHwpxFile && !articlePageLeaving;
+      articleHwpxApplyController = controller;
+      articleHwpxApplying = true;
+      updateArticleHwpxApplyState();
+      showArticleHwpxStatus(`${articleHwpxCountMessage(requestedReady)} · 한글 보고서에 반영하고 있습니다. 미완료 항목의 기존 기사 문구는 지우며, 원본 파일은 변경하지 않습니다.`, "is-working");
+      try {
+        const body = new FormData();
+        body.append("report_file", selectedFile, selectedFile.name);
+        body.append("draft", JSON.stringify(draft));
+        const response = await fetch("/apply-article-draft", { method: "POST", body, signal: controller.signal });
+        if (!isCurrent()) return;
+        if (!response.ok || /application\/json/i.test(response.headers?.get("Content-Type") || "")) {
+          const payload = await readJson(response);
+          throw new Error(payload.error || "한글파일에 기사를 반영하지 못했습니다.");
+        }
+        const blob = await response.blob();
+        if (!isCurrent()) return;
+        if (!blob.size) throw new Error("완성 파일이 비어 있습니다. 다시 시도해 주세요.");
+        const filename = articleHwpxDownloadName(response, reportDate);
+        articleHwpxDownloadUrl = URL.createObjectURL(blob);
+        articleHwpxDownload.href = articleHwpxDownloadUrl;
+        articleHwpxDownload.download = filename;
+        articleHwpxDownload.hidden = false;
+        articleHwpxDownload.click();
+        const counts = articleHwpxResponseCounts(response, requestedReady);
+        showArticleHwpxStatus(`✓ ${articleHwpxCountMessage(counts.applied, counts.blank)} · 새 한글파일을 다운로드했습니다. 아래 링크로 다시 받을 수 있습니다.`, "is-success");
+      } catch (error) {
+        if (!isCurrent() || error.name === "AbortError") return;
+        showArticleHwpxStatus(`기사 반영 실패 · ${error.message || "서버 연결을 확인해 주세요."}`, "is-error");
+      } finally {
+        if (version === articleHwpxApplyVersion) {
+          articleHwpxApplying = false;
+          articleHwpxApplyController = null;
+          updateArticleHwpxApplyState();
+        }
+      }
+    }
+
+    articleHwpxInput.addEventListener("change", () => selectArticleHwpxFiles(articleHwpxInput.files));
+    articleHwpxClearButton.addEventListener("click", () => invalidateArticleHwpxApply(true));
+    articleHwpxApplyButton.addEventListener("click", applyArticleHwpx);
+    articleHwpxDropzone.addEventListener("dragover", event => {
+      if (![...(event.dataTransfer?.types || [])].includes("Files")) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = articleHwpxApplying ? "none" : "copy";
+      articleHwpxDropzone.classList.toggle("is-dragover", !articleHwpxApplying);
+    });
+    articleHwpxDropzone.addEventListener("dragleave", event => {
+      if (!articleHwpxDropzone.contains(event.relatedTarget)) articleHwpxDropzone.classList.remove("is-dragover");
+    });
+    articleHwpxDropzone.addEventListener("drop", event => {
+      event.preventDefault();
+      articleHwpxDropzone.classList.remove("is-dragover");
+      selectArticleHwpxFiles(event.dataTransfer?.files);
+    });
+    // End article HWPX integration.
+    // A new page starts blank, not from a stale completed/partial draft.
+    // Previously saved dates remain available when the date is changed manually.
+    resetArticleDraftScreen();
+    activeArticleRequest = readActiveArticleRequest();
+    if (activeArticleRequest) selectWorkspace("articles");
+    resetPreviousArticleRequest();
   </script>
 </body>
 </html>

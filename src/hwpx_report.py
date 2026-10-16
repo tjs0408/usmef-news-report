@@ -1,4 +1,4 @@
-"""HWPX 주간 보고서의 표와 미국산 지육가격 그래프를 함께 현행화한다.
+"""HWPX 주간 보고서의 표와 8개 그래프를 함께 현행화한다.
 
 한글 COM의 그림 삽입 기능은 일부 설치 환경에서 멈출 수 있어, HWPX 패키지의
 표 XML과 ``BinData/image2.png``를 직접 갱신한다. 표의 위치·크기·서식은 양식의
@@ -7,9 +7,12 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from io import BytesIO
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -17,22 +20,30 @@ import urllib.request
 import zipfile
 from xml.etree import ElementTree as ET
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
+from curl_cffi import requests as curl_requests
 import pymupdf
 
 from src.hwp_report import HwpReportError, build_hwp_table_payload
+from src.excel_charts import EXCEL_CHARTS, read_chart_exports
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 HWPX_TEMPLATE_PATH = PROJECT_ROOT / "report_template" / "weekly_overseas_market_report_table_template.hwpx"
 USDA_CATTLE_BEEF_PDF_URL = "https://www.ams.usda.gov/mnreports/lsddcbs.pdf"
+JZ_TOKYO_EGG_GRAPH_URL = "https://www.jz-tamago.co.jp/business/souba/graph/#tokyo"
 EXCEL_CHART_BATCH_EXPORT_SCRIPT = PROJECT_ROOT / "work" / "export_excel_charts.ps1"
+US_BEEF_LEGEND_REFERENCE_2026 = PROJECT_ROOT / "report_template" / "us_beef_legend_2026_reference.png"
 
-_NS = {"hp": "http://www.hancom.co.kr/hwpml/2011/paragraph"}
+_NS = {
+    "hp": "http://www.hancom.co.kr/hwpml/2011/paragraph",
+    "hc": "http://www.hancom.co.kr/hwpml/2011/core",
+}
 _HP = "{http://www.hancom.co.kr/hwpml/2011/paragraph}"
 _TABLE_INDEXES = frozenset({1, 2, 4, 5, 8, 9, 11, 12})
 _RED_CHAR_STYLE_ID = "35"
 _BLUE_CHAR_STYLE_ID = "36"
+_BLACK_CHAR_STYLE_ID = "41"
 
 
 def write_hwpx_table_report(
@@ -40,8 +51,9 @@ def write_hwpx_table_report(
     output_path: Path,
     report_date=None,
     template_path: Path = HWPX_TEMPLATE_PATH,
+    chart_output_directory: Path | None = None,
 ) -> dict[str, object]:
-    """Excel의 최신 요약값과 USDA 컷아웃 그래프를 HWPX 보고서에 반영한다."""
+    """Excel의 최신 요약값과 연결된 6개 그래프를 HWPX 보고서에 반영한다."""
     if not template_path.is_file():
         raise HwpReportError(f"HWPX 한글 보고서 양식을 찾지 못했습니다. ({template_path.name})")
 
@@ -63,9 +75,19 @@ def write_hwpx_table_report(
         chart_path = staging_dir / "BinData" / "image2.png"
         if not chart_path.is_file():
             raise HwpReportError("HWPX 양식에서 미국산 지육가격 그래프 영역을 찾지 못했습니다.")
-        chart_path.write_bytes(_download_weekly_choice_cutout_png())
-
-        _replace_excel_charts(staging_dir, excel_path)
+        report_year = date.fromisoformat(str(payload["reportDate"])).year
+        # Independent source downloads overlap Excel's single COM session.
+        # Package writes remain on this thread, preserving the original layout.
+        japan_chart_path = staging_dir / "BinData" / "image9.png"
+        if not japan_chart_path.is_file():
+            raise HwpReportError("HWPX 양식에서 일본 계란 도매가격 그래프 영역을 찾지 못했습니다.")
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="report-graph") as executor:
+            us_graph = executor.submit(_download_weekly_choice_cutout_png)
+            japan_graph = executor.submit(_download_jz_tokyo_egg_graph_png)
+            _replace_excel_charts(staging_dir, excel_path, chart_output_directory)
+            chart_path.write_bytes(us_graph.result())
+            japan_chart_path.write_bytes(japan_graph.result())
+        _replace_us_beef_chart_legend(staging_dir, report_year=report_year)
 
         with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_DEFLATED) as package:
             for source in staging_dir.rglob("*"):
@@ -96,7 +118,21 @@ def _update_section_xml(section_path: Path, payload: dict[str, object]) -> None:
         _update_table_cells(tables[table_index], update["cells"])
 
     ET.register_namespace("hp", _NS["hp"])
+    ET.register_namespace("hc", _NS["hc"])
+    _restore_us_beef_legend_frame(root)
     tree.write(section_path, encoding="UTF-8", xml_declaration=True)
+
+
+def _restore_us_beef_legend_frame(root: ET.Element) -> None:
+    """범례의 원래 위치를 유지하면서 양식에 남아 있던 위쪽 자르기를 해제한다."""
+    for picture in root.findall(".//hp:pic", _NS):
+        image = picture.find("hc:img", _NS)
+        if image is None or image.get("binaryItemIDRef") != "image1":
+            continue
+        clip = picture.find("hp:imgClip", _NS)
+        if clip is not None:
+            clip.set("top", "0")
+        return
 
 
 def _replace_report_title_dates(root: ET.Element, title_date_label: str) -> None:
@@ -140,6 +176,10 @@ def _update_table_cells(table: ET.Element, cells: list[dict[str, object]]) -> No
             runs[0].set("charPrIDRef", _RED_CHAR_STYLE_ID)
         elif color == "blue":
             runs[0].set("charPrIDRef", _BLUE_CHAR_STYLE_ID)
+        elif color == "black":
+            # 원본 셀은 이전 주에 사용했던 빨강/파랑 서식을 보존할 수 있으므로,
+            # 0.0%와 빈 비교값은 검정 전용 문자 서식으로 명시적으로 되돌린다.
+            runs[0].set("charPrIDRef", _BLACK_CHAR_STYLE_ID)
 
 
 def _download_weekly_choice_cutout_png() -> bytes:
@@ -161,9 +201,14 @@ def _download_weekly_choice_cutout_png() -> bytes:
         # 축·월 표기·우측 테두리를 모두 포함한다. HWPX 원본 image2.png와 같은
         # 332×254로 저장해야 한글이 전체를 표시한다.
         with Image.open(BytesIO(pixmap.tobytes("png"))) as page_image:
-            # 원본 그래프의 흰 왼쪽 여백은 제외해 실제 그래프가 표 영역을 충분히
-            # 채우도록 한다. y축의 $ 표기와 오른쪽 테두리는 그대로 보존한다.
-            graph = page_image.crop((1239, 162, 1792, 600))
+            # 표 안에서 그림이 최대한 크게 보이도록 하되, 왼쪽 축의 통화·눈금
+            # 표기가 잘리지 않도록 안전 여백을 둔다. (PDF마다 축 레이블의 폭이
+            # 조금 달라질 수 있어, 그래프 테두리보다 왼쪽에서 시작한다.)
+            # 왼쪽의 불필요한 흰 여백은 제외하고, 가격 눈금의 '$' 바로 앞에서
+            # 시작하도록 자른다.
+            graph = page_image.crop((1240, 162, 1792, 600))
+            # 그래프의 선·축·눈금에는 별도 편집을 하지 않고 PDF 원본을 그대로
+            # 사용한다. 한글 양식에 맞추기 위한 크기 조정만 수행한다.
             fitted = graph.resize((332, 254), Image.Resampling.LANCZOS)
             stream = BytesIO()
             fitted.save(stream, format="PNG")
@@ -177,27 +222,181 @@ def _download_weekly_choice_cutout_png() -> bytes:
             pass
 
 
-def _replace_excel_charts(staging_dir: Path, excel_path: Path) -> None:
+def _replace_us_beef_chart_legend(staging_dir: Path, *, report_year: int) -> None:
+    """원래의 세로형 범례 위치에 보고 연도 레이블을 반영한다."""
+    target = staging_dir / "BinData" / "image1.bmp"
+    if not target.is_file():
+        raise HwpReportError("HWPX 양식에서 미국산 지육가격 그래프 범례를 찾지 못했습니다.")
+    try:
+        if report_year == 2026 and US_BEEF_LEGEND_REFERENCE_2026.is_file():
+            # 사용자가 확인한 원본 세로 범례를 그대로 사용한다. 그림 객체의
+            # 위치·크기·자르기 설정은 양식 원본을 건드리지 않아 처음 위치에 표시된다.
+            with Image.open(US_BEEF_LEGEND_REFERENCE_2026) as reference:
+                legend = reference.convert("RGB").resize((81, 51), Image.Resampling.LANCZOS)
+                legend.save(target, format="BMP")
+            return
+        target.write_bytes(_render_us_beef_chart_legend(report_year))
+    except Exception as error:
+        raise HwpReportError(f"미국산 지육가격 그래프 범례를 갱신하지 못했습니다. ({error})") from error
+
+
+def _render_us_beef_chart_legend(report_year: int) -> bytes:
+    """다음 연도에도 기존 세로형 범례 크기를 유지해 그린다."""
+    canvas = Image.new("RGB", (81, 51), "white")
+    draw = ImageDraw.Draw(canvas)
+    font_path = Path(r"C:\Windows\Fonts\arial.ttf")
+    font = ImageFont.truetype(str(font_path), 7) if font_path.is_file() else ImageFont.load_default()
+
+    def rounded_line(start_x: int, end_x: int, y: int, color: str, width: int) -> None:
+        radius = width / 2
+        draw.line((start_x, y, end_x, y), fill=color, width=width)
+        draw.ellipse((start_x - radius, y - radius, start_x + radius, y + radius), fill=color)
+        draw.ellipse((end_x - radius, y - radius, end_x + radius, y + radius), fill=color)
+
+    rounded_line(8, 33, 8, "#ff0000", 2)
+    rounded_line(8, 33, 23, "#33cccc", 2)
+    for start_x in range(8, 34, 6):
+        rounded_line(start_x, min(start_x + 3, 34), 39, "#000000", 1)
+
+    draw.text((39, 1), str(report_year), fill="black", font=font)
+    draw.text((39, 17), str(report_year - 1), fill="black", font=font)
+    draw.text((39, 33), "5 yr Avg", fill="black", font=font)
+    stream = BytesIO()
+    canvas.save(stream, format="BMP")
+    return stream.getvalue()
+
+
+def _replace_japan_egg_chart(staging_dir: Path) -> None:
+    """JA 전농타마고 도쿄 M란 그래프를 HWPX의 기존 그림 영역에 넣는다."""
+    target = staging_dir / "BinData" / "image9.png"
+    if not target.is_file():
+        raise HwpReportError("HWPX 양식에서 일본 계란 도매가격 그래프 영역을 찾지 못했습니다.")
+    target.write_bytes(_download_jz_tokyo_egg_graph_png())
+
+
+def _download_jz_tokyo_egg_graph_png() -> bytes:
+    """JZ 전농타마고 웹 그래프의 도쿄 M란 차트를 HWPX 크기로 렌더링한다.
+
+    해당 페이지는 이미지 파일이 아니라 Chart.js 캔버스로 그래프를 그린다. 원본
+    페이지의 ``tokyo6Chart`` 데이터·색상·축 범위를 읽어, 한글 양식의 기존
+    image9 영역(950×479)에 맞는 PNG로 만든다.
+    """
+    try:
+        response = curl_requests.get(
+            JZ_TOKYO_EGG_GRAPH_URL,
+            headers={"Accept": "text/html", "Referer": "https://www.jz-tamago.co.jp/business/souba/"},
+            impersonate="chrome",
+            timeout=30,
+        )
+        response.raise_for_status()
+    except Exception as error:
+        raise HwpReportError(f"JA 전농타마고 도쿄 계란 그래프를 가져오지 못했습니다. ({error})") from error
+
+    try:
+        chart_script = re.search(
+            r'<canvas id="tokyo6Chart"></canvas>\s*<script[^>]*>(.*?)</script>',
+            response.text,
+            flags=re.DOTALL,
+        )
+        if chart_script is None:
+            raise ValueError("tokyo6Chart 설정을 찾지 못했습니다.")
+        datasets: list[tuple[str, list[float], str, bool]] = []
+        dataset_pattern = re.compile(
+            r"label:\s*'([^']+)'[\s\S]*?data:\s*\[([^\]]*)\][\s\S]*?"
+            r'pointStyle:\s*"([^"]+)"[\s\S]*?pointBackgroundColor:\s*"(#[0-9A-Fa-f]{6})"',
+        )
+        for label, raw_values, point_style, color in dataset_pattern.findall(chart_script.group(1)):
+            values = [float(value.strip()) for value in raw_values.split(",") if value.strip()]
+            if values:
+                datasets.append((label, values, color, point_style == "circle"))
+        if not datasets:
+            raise ValueError("도쿄 그래프의 월별 데이터를 읽지 못했습니다.")
+        return _render_japan_egg_chart(datasets)
+    except Exception as error:
+        raise HwpReportError(f"JA 전농타마고 도쿄 계란 그래프를 처리하지 못했습니다. ({error})") from error
+
+
+def _render_japan_egg_chart(datasets: list[tuple[str, list[float], str, bool]]) -> bytes:
+    """원본 Chart.js 차트의 선·축·범례 구성을 950×479 PNG로 재현한다."""
+    width, height = 950, 479
+    canvas = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(canvas)
+    font_path = Path(r"C:\Windows\Fonts\malgun.ttf")
+    font = ImageFont.truetype(str(font_path), 14) if font_path.is_file() else ImageFont.load_default()
+    legend_font = ImageFont.truetype(str(font_path), 13) if font_path.is_file() else ImageFont.load_default()
+
+    # HWPX 표 안에서 차트가 작아 보이지 않도록 원본 캔버스의 상단 여백을
+    # 줄이고, 400 눈금 표기가 남을 만큼만 여유를 둔다.
+    left, right, top, bottom = 37, 945, 20, 415
+    minimum, maximum = 100.0, 400.0
+    grid_color = "#d9d9d9"
+    for tick in (100, 200, 300, 400):
+        y = round(bottom - (tick - minimum) / (maximum - minimum) * (bottom - top))
+        draw.line((left, y, right, y), fill=grid_color, width=1)
+        label = str(tick)
+        text_box = draw.textbbox((0, 0), label, font=font)
+        draw.text((left - 10 - (text_box[2] - text_box[0]), y - 8), label, fill="#333333", font=font)
+    for index in range(13):
+        x = round(77 + index * (829 / 11)) if index < 12 else 906
+        draw.line((x, top, x, bottom), fill=grid_color, width=1)
+    draw.line((left, top, left, bottom), fill="#999999", width=1)
+
+    month_labels = [f"{item}월" for item in range(1, 13)]
+    x_values = [round(77 + index * (829 / 11)) for index in range(12)]
+    for x, label in zip(x_values, month_labels):
+        box = draw.textbbox((0, 0), label, font=font)
+        draw.text((x - (box[2] - box[0]) / 2, bottom + 10), label, fill="#666666", font=font)
+
+    # 원본 Chart.js가 선언한 순서를 유지하되, 최신(원형 표식) 선이 항상 잘
+    # 보이도록 마지막에 그린다.
+    for label, values, color, is_current_year in sorted(datasets, key=lambda item: item[3]):
+        points = [
+            (x_values[index], round(bottom - (value - minimum) / (maximum - minimum) * (bottom - top)))
+            for index, value in enumerate(values[:12])
+        ]
+        if len(points) > 1:
+            draw.line(points, fill=color, width=1)
+        for x, y in points:
+            if is_current_year:
+                draw.ellipse((x - 5, y - 5, x + 5, y + 5), fill=color)
+            else:
+                draw.rectangle((x - 4, y - 4, x + 4, y + 4), fill=color)
+
+    legend_x = 536
+    legend_y = 456
+    for label, _, color, is_current_year in datasets:
+        if is_current_year:
+            draw.ellipse((legend_x, legend_y - 7, legend_x + 14, legend_y + 7), fill=color)
+        else:
+            draw.rectangle((legend_x, legend_y - 6, legend_x + 12, legend_y + 6), fill=color)
+        draw.text((legend_x + 18, legend_y - 9), label, fill="#555555", font=legend_font)
+        label_width = draw.textbbox((0, 0), label, font=legend_font)[2]
+        legend_x += 18 + label_width + 12
+
+    stream = BytesIO()
+    canvas.save(stream, format="PNG")
+    return stream.getvalue()
+
+
+def _replace_excel_charts(staging_dir: Path, excel_path: Path, chart_output_directory: Path | None = None) -> None:
     """Excel 그래프를 한 번에 내보내 HWPX 원본 영역에 넣는다.
 
     Excel COM을 차트마다 새로 시작하면 시작·파일 열기 비용이 누적된다. 다섯 개
     차트를 하나의 읽기 전용 Excel 세션에서 PNG로 내보낸 뒤, Python에서 HWPX용
     BMP 크기만 각각 맞춘다.
     """
-    charts = (
-        ("호주산 어린소가격", "image3.bmp", 4, 166, (736, 343)),  # 소-호주 FJ
-        ("미국산 지육가격", "image4.bmp", 5, 169, (754, 330)),  # 돼지-미국 FM
-        ("독일산 지육가격", "image5.bmp", 6, 329, (833, 341)),  # 돼지-EU(독일) LQ
-        ("미국산 신선 WOG(통닭) 가격", "image6.bmp", 8, 8, (595, 292)),  # 미국 육계 그래프(WOG) H
-        ("브라질 육계 가격", "image7.bmp", 10, 12, (1110, 411)),  # 브라질그래프 L
-    )
+    charts = EXCEL_CHARTS
 
     for label, filename, _, _, _ in charts:
         target = staging_dir / "BinData" / filename
         if not target.is_file():
             raise HwpReportError(f"HWPX 양식에서 {label} 그래프 영역을 찾지 못했습니다.")
 
-    png_paths = _export_excel_charts_png(excel_path, charts)
+    # Only exports from this exact saved workbook (size + nanosecond mtime +
+    # chart mapping) can be reused. Otherwise keep the existing COM fallback.
+    png_paths = read_chart_exports(chart_output_directory, excel_path)
+    if png_paths is None:
+        png_paths = _export_excel_charts_png(excel_path, charts)
     for chart_index, (label, filename, _, _, image_size) in enumerate(charts, start=1):
         target = staging_dir / "BinData" / filename
         target.write_bytes(_convert_chart_to_bmp(png_paths[chart_index], image_size, label))

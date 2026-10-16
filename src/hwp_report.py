@@ -17,7 +17,7 @@ import tempfile
 from threading import Lock
 from typing import Any, Iterable
 
-from openpyxl import load_workbook
+from .xlsx_values import read_cached_sheets
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -103,12 +103,17 @@ def latest_thursday(today: date | None = None) -> date:
 def build_hwp_table_payload(excel_path: Path, report_date: date | None = None) -> dict[str, object]:
     """HWP 표의 갱신 좌표와 표시 문자열을 Excel에서 만듭니다.
 
-    ``data_only=True``는 Excel COM 저장 단계에서 계산·저장한 수식 결과를 읽는다.
+    Excel COM 저장 단계에서 계산·저장한 수식 결과만 읽는다. 표에 필요한 두
+    시트·행만 ZIP에서 읽어, 모든 시트의 셀·스타일·그래프 파싱을 생략한다.
     이 함수는 Excel 파일을 수정하지 않는다.
     """
     preferred_date = report_date or latest_thursday()
     try:
-        workbook = load_workbook(excel_path, data_only=True, read_only=False)
+        rows_by_sheet = {sheet: {row} for sheet, row in _REPORT_DATE_ROWS.items()}
+        for section in _TABLE_SECTIONS:
+            rows_by_sheet[section["sheet"]].add(section["dateRow"])
+            rows_by_sheet[section["sheet"]].update(metric[1] for metric in section["metrics"])
+        workbook = read_cached_sheets(excel_path, rows_by_sheet)
     except Exception as error:  # pragma: no cover - openpyxl 메시지는 환경별로 다름
         raise HwpReportError(f"현행화된 Excel 파일을 읽지 못했습니다. ({error})") from error
 
@@ -134,8 +139,6 @@ def build_hwp_table_payload(excel_path: Path, report_date: date | None = None) -
             tables.append(_build_section_cells(workbook[section["sheet"]], start_column, section))
     except KeyError as error:
         raise HwpReportError(f"Excel 양식에서 필요한 보고서 시트를 찾지 못했습니다. ({error})") from error
-    finally:
-        workbook.close()
 
     return {
         "reportDate": target_date.isoformat(),
@@ -330,12 +333,14 @@ def _display_text(value: object, display_format: str) -> str:
         return f"{rounded:.2f}"
     if display_format == "percent":
         rounded = (numeric * Decimal("100")).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        if rounded == 0:
+            rounded = Decimal("0.0")
         return f"{rounded:.1f}%"
     raise ValueError(f"지원하지 않는 HWP 표시 형식입니다: {display_format}")
 
 
 def _comparison_color(value: object) -> str:
-    """전주·전년 대비 수치에 사용할 한글 원본 양식의 글자색을 반환합니다."""
+    """한글 표에 *표시되는* 전주·전년 대비 값의 글자색을 반환합니다."""
     if value is None:
         return "black"
     if isinstance(value, str):
@@ -343,13 +348,22 @@ def _comparison_color(value: object) -> str:
         if not stripped or stripped.startswith("#"):
             return "black"
         try:
+            # Excel 계산값은 -0.014처럼 비율로 들어오고, 텍스트 값은 -1.4%처럼
+            # 표시 단위로 들어올 수 있다. 두 경우 모두 표시값 기준으로 판정한다.
             value = Decimal(stripped.replace(",", "").replace("%", ""))
+            if "%" in stripped:
+                value /= Decimal("100")
         except InvalidOperation:
             return "black"
     try:
         numeric = Decimal(str(value))
     except (InvalidOperation, ValueError):
         return "black"
-    if not numeric.is_finite() or numeric == 0:
+    if not numeric.is_finite():
         return "black"
-    return "red" if numeric > 0 else "blue"
+    # 한글 표는 소수 첫째 자리 %로 보여준다. 원본 계산값이 -0.04%여도 표에
+    # '-0.0%'가 아닌 '0.0%'로 보이는 경우에는 색도 검정이어야 한다.
+    displayed_percent = (numeric * Decimal("100")).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+    if displayed_percent == 0:
+        return "black"
+    return "red" if displayed_percent > 0 else "blue"

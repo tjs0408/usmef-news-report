@@ -25,7 +25,12 @@ class EditorialStyleTests(unittest.TestCase):
         with patch.object(s, '_ollama_generate', return_value={'response': fact}) as generate:
             self.assertEqual(s._extract_report_facts(kind='us_egg', audience='미국 계란', title='Egg prices',
                 body='US egg prices rose 5%', headline_only=False, search_result=False), [fact])
-        self.assertIn('문체 예시:', generate.call_args.args[0])
+        # Small CPU models copied unrelated past-week facts from examples.
+        # Keep the reference library for editorial retrieval, not in the
+        # bounded translation prompt; output syntax is schema-constrained.
+        self.assertNotIn('문체 예시:', generate.call_args.args[0])
+        self.assertIn('명사형 종결', generate.call_args.args[0])
+        self.assertEqual(generate.call_args.kwargs['response_format']['required'], ['summary'])
 
     def test_global_trade_logistics_and_late_body_passages_are_eligible(self):
         cases = (

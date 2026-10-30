@@ -28,7 +28,7 @@ BRAZIL_PENDING = (
 def article(name, **extra):
     return {"title": "미국 돼지고기 공급과 수요 논의", "url": "https://example.org/" + name,
             "publisher": "Test", "publishedDate": date(2026, 10, 6),
-            "body": "미국 돼지고기 수요와 공급 및 가격 추이를 분석했다. " * 5,
+            "body": "미국 돼지고기 공급은 현지 수요 회복으로 부족해져 가격이 오를 전망이다. " * 5,
             "sourceLanguage": "ko", "searchResult": False, "headlineOnly": False, **extra}
 
 
@@ -36,13 +36,13 @@ class NativePreselectionTests(unittest.TestCase):
     def test_valid_native_alternate_beats_selected_article_without_inference(self):
         cases = (
             ("domestic", "미국 피자·햄버거 업계의 쇠고기 공급 논의",
-             "미국 쇠고기 시장의 공급과 수요를 살펴봤다. " * 5,
+             "미국 쇠고기 시장은 소비 부진으로 공급이 남아 가격이 하락할 전망이다. " * 5,
              "중국 브라질산 쇠고기에 추가 관세", BEEF_TARIFF, "ko"),
             ("domestic_pork", "베트남 돼지고기 공급과 수요 논의",
-             "베트남 돼지고기 시장의 공급과 수요를 살펴봤다. " * 5,
+             "베트남 돼지고기 시장은 소비 부진으로 공급이 남아 가격이 하락할 전망이다. " * 5,
              "캐나다산 돼지고기 수입 증가 전망", CPTPP_IMPORTS, "ko"),
             ("domestic_chicken", "미국 닭고기 공급과 수요 논의",
-             "미국 닭고기 시장의 공급과 수요를 살펴봤다. " * 5,
+             "미국 닭고기 시장은 소비 부진으로 공급이 남아 가격이 하락할 전망이다. " * 5,
              "캐나다산 닭고기 수입 증가 전망", CPTPP_IMPORTS, "ko"),
             ("brazil_chicken", "Brazil chicken production outlook",
              "Brazil chicken supply and demand production market commentary. " * 5,
@@ -58,10 +58,13 @@ class NativePreselectionTests(unittest.TestCase):
                                sourceLanguage=language, sourceMethod="naver" if language == "ko" else "preferred")
                 before = deepcopy(main)
                 events = []
+                original_native = s._native_report_sentence
                 with patch.object(d, "_usmef_pair", return_value={}), \
                      patch.object(d, "_find_section", side_effect=lambda spec, start, end: main if spec.key == key else None), \
                      patch.object(d, "_search_article", return_value=None) as search, \
                      patch.object(s, "_ensure_ollama_ready", return_value={"available": False, "message": "offline"}), \
+                     patch.object(s, "_native_report_sentence", side_effect=lambda kind, body:
+                                  original_native(kind, body) if body == ready_body else None), \
                      patch.object(s, "_summarize_report_sentence", side_effect=AssertionError("no model summary needed")) as summarize, \
                      patch.object(s, "_ollama_generate", side_effect=AssertionError("no model call permitted")) as model:
                     result = d.collect_weekly_livestock_report_draft(REPORT_DAY, progress=lambda **event: events.append(event))
@@ -72,12 +75,20 @@ class NativePreselectionTests(unittest.TestCase):
                 self.assertEqual(section["diagnostics"]["modelCalls"], 0)
                 self.assertEqual(section["diagnostics"]["alternativeAttempts"], 0)
                 self.assertEqual(section["retryCount"], 0)
-                self.assertEqual({link["url"] for link in section["candidateLinks"]}, {main["url"], second["url"]})
+                expected_links = {main['url']} if d.SPECS_BY_KEY[key].domestic else {main['url'], second['url']}
+                self.assertEqual({link["url"] for link in section["candidateLinks"]}, expected_links)
                 self.assertTrue(s._valid_brief(section["summary"], key, ready_body))
                 self.assertIn("sourceExcerpt", section["article"])
                 self.assertEqual(main, before)
                 self.assertNotIn("_nativeReadySummary", str(section))
-                self.assertFalse(any(call.args[0].key == key for call in search.call_args_list))
+                comparison_searches = [call for call in search.call_args_list
+                                       if call.args[0].key == key and call.kwargs.get('editorial')]
+                self.assertEqual(len(comparison_searches), 0 if d.SPECS_BY_KEY[key].domestic else 1)
+                if comparison_searches:
+                    self.assertEqual(comparison_searches[0].args[1:3], (START, END))
+                optional_searches = sum(call.args[0].key == key and not call.kwargs.get('editorial')
+                                        for call in search.call_args_list)
+                self.assertLessEqual(optional_searches, 1 if d.SPECS_BY_KEY[key].domestic else 0)
                 self.assertTrue(all(event["sections"][key]["article"]["url"] == ready["url"]
                                     for event in events if event["sections"][key]["article"]))
                 summarize.assert_not_called()

@@ -44,7 +44,9 @@ class CollectorEditorialContextTests(unittest.TestCase):
 
         def summarize(key, title, source_body):
             nonlocal inference_seen
-            self.assertEqual(source_body, body, "collector must retain the full fallback source")
+            self.assertEqual(main['body'], body, "collector must retain the full fallback source")
+            self.assertIn(source_body, body, "comparison may focus only an intact original passage")
+            self.assertIn(CHICKEN_EXPLANATION, source_body)
             self.assertFalse(any(e[0] == "completed" for e in events), "bare native completed before context translation")
             inference_seen = True
             return real_summarize(key, title, source_body)
@@ -130,7 +132,7 @@ class CollectorEditorialContextTests(unittest.TestCase):
         offline = d._prefer_native_summary_candidate(primary, d.SPECS_BY_KEY['australia'], START, END, False)
         self.assertEqual(offline['url'], primary['url'])
 
-    def test_just_completed_enrichment_is_reused_before_model_inference(self):
+    def test_just_completed_enrichment_reuses_a_substantive_native_issue_without_inference(self):
         from test_current_market_passage_repairs import LIVE_EXPORT
         main = article('australia', 'main',
             'Australian beef prices are rising because export demand is strong and cattle supplies are limited. '
@@ -148,14 +150,16 @@ class CollectorEditorialContextTests(unittest.TestCase):
              patch.object(d, '_search_article', return_value=None) as search, \
              patch.object(d, '_candidate_links', side_effect=enrich), \
              patch.object(s, '_ensure_ollama_ready', return_value={'available': True}), \
-             patch.object(s, '_request_json', side_effect=AssertionError('existing native original needs no model')) as model:
+             patch.object(s, '_request_json', side_effect=AssertionError('substantive native issue needs no inference')) as model:
             result = d.collect_weekly_livestock_report_draft(REPORT)
         section = result['sections']['australia']
         self.assertEqual(section['status'], 'completed')
         self.assertEqual(section['article']['url'], ready['url'])
         self.assertEqual(section['diagnostics']['modelCalls'], 0)
         model.assert_not_called()
-        self.assertFalse(any(call.args[0].key == 'australia' for call in search.call_args_list))
+        comparisons = [call for call in search.call_args_list if call.args[0].key == 'australia']
+        self.assertEqual(len(comparisons), 1)
+        self.assertTrue(comparisons[0].kwargs.get('editorial'))
 
     def test_offline_native_statistic_still_completes_without_inference(self):
         body = HATCHERY + CHICKEN_EXPLANATION

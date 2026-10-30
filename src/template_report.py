@@ -10,7 +10,7 @@ import re
 import shutil
 import subprocess
 import time
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 import xml.etree.ElementTree as ElementTree
 from zipfile import ZIP_DEFLATED, ZipFile
 from .excel_charts import chart_specs, record_chart_exports
@@ -98,46 +98,95 @@ AUSTRALIA_BEEF_SHEET = {
 }
 
 
+class _PendingRowWorkbook:
+    """One request's read-only workbook view; never retained across uploads."""
+
+    def __init__(self, archive: ZipFile):
+        self.archive = archive
+        self.sheet_paths = _find_sheet_paths(archive)
+        self._cell_values: dict[str, dict[str, str]] = {}
+
+    def values(self, sheet_name: str) -> dict[str, str]:
+        path = self.sheet_paths[sheet_name]
+        if path not in self._cell_values:
+            self._cell_values[path] = _read_sheet_cell_values(self.archive, path)
+        return self._cell_values[path]
+
+
+def _query_pending_rows(
+    template_path: Path,
+    today: date,
+    query: Callable[[_PendingRowWorkbook, date], list[dict[str, object]]],
+) -> list[dict[str, object]]:
+    with ZipFile(template_path, "r") as archive:
+        return query(_PendingRowWorkbook(archive), today)
+
+
+def find_pending_rows(template_path: Path, today: date) -> dict[str, list[dict[str, object]]]:
+    """Run all eight row queries through one archive and shared sheet reads.
+
+    A newly uploaded/replaced file is opened for every call. Nothing is cached
+    by pathname, modification time or process lifetime, and all returned rows
+    use the same request date and original per-sheet eligibility rules.
+    """
+    with ZipFile(template_path, "r") as archive:
+        workbook = _PendingRowWorkbook(archive)
+        return {
+            "market": _pending_report_dates(workbook, today),
+            "eu_germany": _pending_eu_germany_rows(workbook, today),
+            "japan_egg": _pending_japan_egg_rows(workbook, today),
+            "us_egg": _pending_us_egg_rows(workbook, today),
+            "us_egg_consumer_price": _pending_us_egg_consumer_price_rows(workbook, today),
+            "brazil_chicken": _pending_brazil_chicken_rows(workbook, today),
+            "us_chicken": _pending_us_chicken_rows(workbook, today),
+            "australia_beef": _pending_australia_beef_rows(workbook, today),
+        }
+
+
 def find_pending_report_dates(template_path: Path, today: date) -> list[dict[str, object]]:
     """소·돼지-미국 시트의 최신 연속 미입력 주차만 찾습니다.
 
     양식 중간의 과거 공백(휴장·수동 보정 대기 등)은 다시 OCR하지 않는다.
     최신으로 이어진 빈 주차만 처리해 주간 현행화 요청의 PDF 수를 줄인다.
     """
-    with ZipFile(template_path, "r") as archive:
-        sheet_paths = _find_sheet_paths(archive)
-        pending: list[dict[str, object]] = []
-        for config in MARKET_SHEETS:
-            cell_values = _read_sheet_cell_values(archive, sheet_paths[config["sheetName"]])
-            sheet_pending: list[dict[str, object]] = []
-            for row in range(60, 7, -1):
-                friday_serial = cell_values.get(f"{config['dateColumn']}{row}")
-                current_slaughter = cell_values.get(f"{config['currentColumn']}{row}")
-                if friday_serial is None:
-                    continue
-                friday = _excel_serial_to_date(friday_serial)
-                report_date = friday + timedelta(days=5)
-                if report_date > today:
-                    continue
-                if current_slaughter is not None:
-                    break
-                sheet_pending.append(
-                    {
-                        **config,
-                        "row": row,
-                        "reportDate": report_date.isoformat(),
-                        "exchangeDate": friday.isoformat(),
-                    }
-                )
-            pending.extend(reversed(sheet_pending))
+    return _query_pending_rows(template_path, today, _pending_report_dates)
+
+
+def _pending_report_dates(workbook: _PendingRowWorkbook, today: date) -> list[dict[str, object]]:
+    pending: list[dict[str, object]] = []
+    for config in MARKET_SHEETS:
+        cell_values = workbook.values(config["sheetName"])
+        sheet_pending: list[dict[str, object]] = []
+        for row in range(60, 7, -1):
+            friday_serial = cell_values.get(f"{config['dateColumn']}{row}")
+            current_slaughter = cell_values.get(f"{config['currentColumn']}{row}")
+            if friday_serial is None:
+                continue
+            friday = _excel_serial_to_date(friday_serial)
+            report_date = friday + timedelta(days=5)
+            if report_date > today:
+                continue
+            if current_slaughter is not None:
+                break
+            sheet_pending.append(
+                {
+                    **config,
+                    "row": row,
+                    "reportDate": report_date.isoformat(),
+                    "exchangeDate": friday.isoformat(),
+                }
+            )
+        pending.extend(reversed(sheet_pending))
     return pending
 
 
 def find_pending_eu_germany_rows(template_path: Path, today: date) -> list[dict[str, object]]:
     """돼지-EU(독일) 양식에서 아직 입력되지 않은 과거 주차를 찾습니다."""
-    with ZipFile(template_path, "r") as archive:
-        sheet_paths = _find_sheet_paths(archive)
-        cell_values = _read_sheet_cell_values(archive, sheet_paths[EU_GERMANY_SHEET["sheetName"]])
+    return _query_pending_rows(template_path, today, _pending_eu_germany_rows)
+
+
+def _pending_eu_germany_rows(workbook: _PendingRowWorkbook, today: date) -> list[dict[str, object]]:
+    cell_values = workbook.values(EU_GERMANY_SHEET["sheetName"])
     pending: list[dict[str, object]] = []
     # 과거 휴장일 등으로 남아 있는 단일 공백은 보존하고, 가장 최근에 이어진
     # 새 주차 공백만 현행화한다.
@@ -162,9 +211,11 @@ def find_pending_eu_germany_rows(template_path: Path, today: date) -> list[dict[
 
 def find_pending_japan_egg_rows(template_path: Path, today: date) -> list[dict[str, object]]:
     """계란-일본 양식에서 도쿄 M란 기준치가 비어 있는 지난 주차를 찾습니다."""
-    with ZipFile(template_path, "r") as archive:
-        sheet_paths = _find_sheet_paths(archive)
-        cell_values = _read_sheet_cell_values(archive, sheet_paths[JAPAN_EGG_SHEET["sheetName"]])
+    return _query_pending_rows(template_path, today, _pending_japan_egg_rows)
+
+
+def _pending_japan_egg_rows(workbook: _PendingRowWorkbook, today: date) -> list[dict[str, object]]:
+    cell_values = workbook.values(JAPAN_EGG_SHEET["sheetName"])
 
     pending: list[dict[str, object]] = []
     for row in range(6, 58):
@@ -187,9 +238,11 @@ def find_pending_japan_egg_rows(template_path: Path, today: date) -> list[dict[s
 
 def find_pending_us_egg_rows(template_path: Path, today: date) -> list[dict[str, object]]:
     """계란-미국 양식에서 재고량 또는 Large 가격이 비어 있는 지난 주차를 찾습니다."""
-    with ZipFile(template_path, "r") as archive:
-        sheet_paths = _find_sheet_paths(archive)
-        cell_values = _read_sheet_cell_values(archive, sheet_paths[US_EGG_SHEET["sheetName"]])
+    return _query_pending_rows(template_path, today, _pending_us_egg_rows)
+
+
+def _pending_us_egg_rows(workbook: _PendingRowWorkbook, today: date) -> list[dict[str, object]]:
+    cell_values = workbook.values(US_EGG_SHEET["sheetName"])
 
     pending: list[dict[str, object]] = []
     for row in range(6, 58):
@@ -214,10 +267,12 @@ def find_pending_us_egg_rows(template_path: Path, today: date) -> list[dict[str,
 
 def find_pending_us_egg_consumer_price_rows(template_path: Path, today: date) -> list[dict[str, object]]:
     """계란-미국 그래프의 월별 FRED 소비자가격 빈칸을 찾습니다."""
+    return _query_pending_rows(template_path, today, _pending_us_egg_consumer_price_rows)
+
+
+def _pending_us_egg_consumer_price_rows(workbook: _PendingRowWorkbook, today: date) -> list[dict[str, object]]:
     config = US_EGG_CONSUMER_PRICE_GRAPH
-    with ZipFile(template_path, "r") as archive:
-        sheet_paths = _find_sheet_paths(archive)
-        cell_values = _read_sheet_cell_values(archive, sheet_paths[config["sheetName"]])
+    cell_values = workbook.values(config["sheetName"])
 
     pending: list[dict[str, object]] = []
     current_month = today.replace(day=1)
@@ -241,9 +296,11 @@ def find_pending_us_egg_consumer_price_rows(template_path: Path, today: date) ->
 
 def find_pending_brazil_chicken_rows(template_path: Path, today: date) -> list[dict[str, object]]:
     """닭-브라질 양식에서 À vista R$/kg 또는 BRL 환율이 비어 있는 주차를 찾습니다."""
-    with ZipFile(template_path, "r") as archive:
-        sheet_paths = _find_sheet_paths(archive)
-        cell_values = _read_sheet_cell_values(archive, sheet_paths[BRAZIL_CHICKEN_SHEET["sheetName"]])
+    return _query_pending_rows(template_path, today, _pending_brazil_chicken_rows)
+
+
+def _pending_brazil_chicken_rows(workbook: _PendingRowWorkbook, today: date) -> list[dict[str, object]]:
+    cell_values = workbook.values(BRAZIL_CHICKEN_SHEET["sheetName"])
 
     pending: list[dict[str, object]] = []
     for row in range(6, 58):
@@ -267,9 +324,11 @@ def find_pending_brazil_chicken_rows(template_path: Path, today: date) -> list[d
 
 def find_pending_us_chicken_rows(template_path: Path, today: date) -> list[dict[str, object]]:
     """닭-미국 양식에서 USDA WOG 가격이 비어 있는 지난 주차를 찾습니다."""
-    with ZipFile(template_path, "r") as archive:
-        sheet_paths = _find_sheet_paths(archive)
-        cell_values = _read_sheet_cell_values(archive, sheet_paths[US_CHICKEN_SHEET["sheetName"]])
+    return _query_pending_rows(template_path, today, _pending_us_chicken_rows)
+
+
+def _pending_us_chicken_rows(workbook: _PendingRowWorkbook, today: date) -> list[dict[str, object]]:
+    cell_values = workbook.values(US_CHICKEN_SHEET["sheetName"])
 
     pending: list[dict[str, object]] = []
     for row in range(6, 58):
@@ -286,9 +345,11 @@ def find_pending_us_chicken_rows(template_path: Path, today: date) -> list[dict[
 
 def find_pending_australia_beef_rows(template_path: Path, today: date) -> list[dict[str, object]]:
     """소-호주 양식에서 MLA 도축량·EYCI·AUD 환율이 비어 있는 지난 주차를 찾습니다."""
-    with ZipFile(template_path, "r") as archive:
-        sheet_paths = _find_sheet_paths(archive)
-        cell_values = _read_sheet_cell_values(archive, sheet_paths[AUSTRALIA_BEEF_SHEET["sheetName"]])
+    return _query_pending_rows(template_path, today, _pending_australia_beef_rows)
+
+
+def _pending_australia_beef_rows(workbook: _PendingRowWorkbook, today: date) -> list[dict[str, object]]:
+    cell_values = workbook.values(AUSTRALIA_BEEF_SHEET["sheetName"])
 
     pending: list[dict[str, object]] = []
     for row in range(59, 7, -1):

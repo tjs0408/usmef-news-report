@@ -18,8 +18,10 @@ class DomesticArticleFocusTests(TestCase):
         self.assertFalse(self.focus('축산물 가격 상승',
             '미국의 석유 수출 가격이 상승했습니다. 돼지고기는 국내 수요로 1.9% 상승했습니다.'))
 
-    def test_us_inflation_pork_market_remains_valid(self):
+    def test_us_inflation_can_explain_pork_market_without_a_pork_headline(self):
         self.assertTrue(self.focus('미국 소비자물가 발표',
+            '미국 돼지고기 소매가격은 공급 증가로 전년보다 2% 하락했습니다.'))
+        self.assertTrue(self.focus('미국 돼지고기 소매가격 하락',
             '미국 돼지고기 소매가격은 공급 증가로 전년보다 2% 하락했습니다.'))
 
     def test_same_species_trade_and_cptpp_remain_valid(self):

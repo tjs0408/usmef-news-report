@@ -32,14 +32,19 @@ class CollectorRetryBudgetTests(unittest.TestCase):
         content.assert_called_once()
         repair.assert_not_called()
 
-    def collect(self, main, summarize, *, search_result=None, key="us_egg", native=None):
+    def collect(self, main, summarize, *, search_result=None, comparison_result=None, key="us_egg", native=None):
         events = []
+        def search_source(spec, *_args, **kwargs):
+            if spec.key != key:
+                return None
+            # Recovery-only originals must not leak into the initial issue
+            # comparison and accidentally bypass the intended failed draft.
+            return comparison_result if kwargs.get('editorial') else search_result
         with ExitStack() as stack:
             stack.enter_context(patch.object(d, "_usmef_pair", return_value={}))
             stack.enter_context(patch.object(d, "_find_section", side_effect=lambda spec, start, end:
                                             main if spec.key == key else None))
-            search = stack.enter_context(patch.object(d, "_search_article", side_effect=lambda spec, *args, **kwargs:
-                                                      search_result if spec.key == key else None))
+            search = stack.enter_context(patch.object(d, "_search_article", side_effect=search_source))
             stack.enter_context(patch.object(s, "_ensure_ollama_ready", return_value={"available": True}))
             if native is None:
                 stack.enter_context(patch.object(s, "_native_report_sentence", return_value=None))
@@ -47,18 +52,33 @@ class CollectorRetryBudgetTests(unittest.TestCase):
                 stack.enter_context(patch.object(s, "_native_report_sentence", side_effect=native))
             summary = stack.enter_context(patch.object(s, "_summarize_report_sentence", side_effect=summarize))
             result = d.collect_weekly_livestock_report_draft(REPORT_DAY, progress=lambda **event: events.append(event))
+        comparison = [call for call in search.call_args_list if call.args[0].key == key and call.kwargs.get('editorial')]
+        self.assertEqual(len(comparison), 1)
+        self.assertEqual(comparison[0].args[1:3], (START, END))
         return result["sections"][key], search, summary, events
 
-    def test_layout_error_keeps_original_and_never_searches_for_recovery(self):
+    def test_layout_error_reuses_verified_alternative_without_searching_again(self):
         main = article("main", alternatives=[article("one"), article("two")])
         section, search, summary, _ = self.collect(main, s.ArticleSummaryLayoutError("layout overflow"))
         self.assertEqual(section["status"], "summary_error")
         self.assertEqual(section["article"]["url"], main["url"])
-        self.assertEqual(section["retryCount"], 0)
-        self.assertEqual(section["diagnostics"]["alternativeAttempts"], 0)
+        self.assertEqual(section["retryCount"], 1)
+        self.assertEqual(section["diagnostics"]["alternativeAttempts"], 1)
         self.assertEqual(len(section["candidateLinks"]), 2)
-        self.assertEqual(summary.call_count, 1)
-        self.assertFalse(any(call.args[0].key == "us_egg" for call in search.call_args_list))
+        self.assertEqual(summary.call_count, 2)
+        self.assertFalse(any(call.args[0].key == "us_egg" and not call.kwargs.get('editorial') for call in search.call_args_list))
+
+    def test_layout_failure_can_complete_from_an_existing_different_original(self):
+        main = article("main", alternatives=[article("one"), article("two")])
+        section, search, summary, _ = self.collect(main, [
+            s.ArticleSummaryLayoutError("layout overflow"),
+            "미국 계란 공급 회복에 따른 가격 하락세와 산란계 사육 규모의 변화 동향을 기록",
+        ])
+        self.assertEqual(section["status"], "completed")
+        self.assertEqual(section["article"]["url"], main["alternatives"][0]["url"])
+        self.assertEqual(section["retryCount"], 1)
+        self.assertEqual(summary.call_count, 2)
+        self.assertFalse(any(call.args[0].key == "us_egg" and not call.kwargs.get('editorial') for call in search.call_args_list))
 
     def test_three_verified_originals_allow_only_one_alternate_attempt(self):
         main = article("main", alternatives=[article("one"), article("two")])
@@ -68,7 +88,7 @@ class CollectorRetryBudgetTests(unittest.TestCase):
         self.assertEqual([call.args[1] for call in summary.call_args_list], [main["title"], main["alternatives"][0]["title"]])
         self.assertEqual(section["retryCount"], 1)
         self.assertEqual(section["diagnostics"]["alternativeAttempts"], 1)
-        self.assertFalse(any(call.args[0].key == "us_egg" for call in search.call_args_list))
+        self.assertFalse(any(call.args[0].key == "us_egg" and not call.kwargs.get('editorial') for call in search.call_args_list))
 
     def test_original_and_alternate_share_two_model_calls(self):
         main = article("main", alternatives=[article("one")])
@@ -86,18 +106,20 @@ class CollectorRetryBudgetTests(unittest.TestCase):
         self.assertEqual(request.call_count, 2)
         self.assertEqual(summary.call_count, 1)
 
-    def test_enrichment_downloads_are_reused_with_one_supplemental_search(self):
+    def test_comparison_originals_are_reused_without_a_second_supplemental_search(self):
         main = article("main")
         extra = article("one", alternatives=[article("two")])
         def summarize(key, title, body):
             if title == main["title"]:
                 raise s.ArticleDigestError("invalid facts")
             return "미국 계란 공급 회복으로 가격이 하락함"
-        section, search, summary, events = self.collect(main, summarize, search_result=extra)
+        section, search, summary, events = self.collect(main, summarize, comparison_result=extra)
         self.assertEqual(section["status"], "completed")
         self.assertEqual(section["article"]["url"], extra["url"])
         self.assertEqual(summary.call_count, 2)
         self.assertEqual(len([call for call in search.call_args_list if call.args[0].key == "us_egg"]), 1)
+        self.assertFalse(any(call.args[0].key == 'us_egg' and not call.kwargs.get('editorial')
+                             for call in search.call_args_list))
         self.assertEqual(section["article"]["publishedDate"], "2026-10-06")
         self.assertEqual(len(section["candidateLinks"]), 2)
         self.assertEqual(section["retryCount"], 1)
@@ -121,7 +143,7 @@ class CollectorRetryBudgetTests(unittest.TestCase):
             section, search, summary, _ = self.collect(article("main"), s.ArticleDigestError("invalid facts"))
         self.assertEqual(section["status"], "summary_error")
         self.assertEqual(summary.call_count, 1)
-        self.assertFalse(any(call.args[0].key == "us_egg" for call in search.call_args_list))
+        self.assertFalse(any(call.args[0].key == "us_egg" and not call.kwargs.get('editorial') for call in search.call_args_list))
         self.assertNotIn("private", str(section))
         self.assertEqual(section["diagnostics"]["alternativeAttempts"], 0)
 

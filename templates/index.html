@@ -184,7 +184,7 @@
               <small class="progress-estimate">검색·요약 처리량 기준이며 완료된 초안부터 표시됩니다. 새로고침하면 기사 작업이 중지되고 화면이 초기화됩니다.</small>
             </section>
             <div class="article-source-rule" aria-label="기사 작성 기준">
-              <span>자동 기준</span><strong id="article-search-window" aria-live="polite">해당 주 일요일~토요일 · 지정 매체 우선</strong>
+              <span>자동 기준</span><strong id="article-search-window" aria-live="polite">해당 주 일요일~토요일 · 지정 매체·공개 뉴스 비교</strong>
               <small>국내기사는 NAVER 우선 · 부족하면 Google·공개 뉴스 검색 보완 · 해당 주차의 원문 날짜와 출처 확인</small>
             </div>
             {% for group in article_groups %}
@@ -193,7 +193,7 @@
               <div class="article-draft-grid livestock-draft-grid">
                 {% for spec in group.sections %}
                 <article class="article-draft-card" data-article-kind="{{ spec.key }}" data-article-label="{{ spec.label }}" data-article-domestic="{{ 'true' if spec.domestic else 'false' }}">
-                  <div><h4>{{ spec.label }}</h4><p>{% if spec.domestic %}해외 {{ group.label }} 수급·가격·교역을 다룬 한국어 기사{% else %}{{ spec.publisher }} 우선 · 해당 주간 원문을 한국어로 요약{% endif %}</p></div>
+                  <div><h4>{{ spec.label }}</h4><p>{% if spec.domestic %}해외 {{ group.label }} 수급·가격·교역을 다룬 한국어 기사{% else %}{{ spec.publisher }}·공개 뉴스 비교 · 해당 주간 원문을 한국어로 요약{% endif %}</p></div>
                   <div id="{{ spec.key }}-article-result" class="article-result" aria-live="polite">아직 기사 초안을 실행하지 않았습니다.</div>
                 </article>
                 {% endfor %}
@@ -508,7 +508,7 @@
     const articleElapsedTime = document.getElementById("article-elapsed-time");
     const articleSearchWindowLabel = document.getElementById("article-search-window");
     // 12항목과 원문 근거 검증 규칙이 바뀌었으므로 과거 초안을 자동 재사용하지 않는다.
-    const articleDraftStorageKey = "weekly-overseas-report-livestock-brief-v19-sunday-week-v1";
+    const articleDraftStorageKey = "weekly-overseas-report-{{ article_style_version }}-sunday-week-v1";
     // Per-tab ownership survives reload. No API keys or article bodies here.
     const articleActiveRequestKey = "weekly-livestock-active-request-v1";
     const articleSpecs = [...document.querySelectorAll("[data-article-kind]")].map(card => ({
@@ -676,8 +676,8 @@
     function updateArticleSearchWindow() {
       const range = articleSearchWindow(articleReportDate.value);
       articleSearchWindowLabel.textContent = range
-        ? `${range.start.replaceAll("-", ".")}~${range.end.replaceAll("-", ".")} (일~토) · 지정 매체 우선`
-        : "해당 주 일요일~토요일 · 지정 매체 우선";
+        ? `${range.start.replaceAll("-", ".")}~${range.end.replaceAll("-", ".")} (일~토) · 지정 매체·공개 뉴스 비교`
+        : "해당 주 일요일~토요일 · 지정 매체·공개 뉴스 비교";
     }
 
     function setArticleDraftStatus(message, tone = "") {
@@ -750,6 +750,17 @@
       return String(title || "").replace(/["“”„‟＂]/g, "'");
     }
 
+    function articleSelectionNote(article, includeReason = true) {
+      // Display-only context: never add relaxed-selection labels to report text.
+      const rawTier = article?.selectionTier;
+      const tier = typeof rawTier === "number" || typeof rawTier === "string" ? Number(rawTier) : null;
+      const label = tier === 1 ? "수급·물가 설명" : tier === 2 ? "유사시장 보완" : "";
+      if (!label) return "";
+      const reason = includeReason && typeof article?.selectionReason === "string"
+        ? article.selectionReason.trim().replace(/\s+/g, " ") : "";
+      return ` · ${label}${reason ? ` · ${reason}` : ""}`;
+    }
+
     function emptyArticleResult(kind, message) {
       articleResult(kind).className = "article-result is-empty";
       articleResult(kind).textContent = message;
@@ -775,7 +786,7 @@
       const meta = document.createElement("p");
       meta.className = "article-result-meta";
       const method = item.sourceMethod === "search" ? " · 검색 보완" : item.sourceMethod === "official" ? " · 공식 시장보고서 보완" : "";
-      meta.textContent = `${article.publisher} · ${formatArticleDate(article.publishedDate)}${method}`;
+      meta.textContent = `${article.publisher} · ${formatArticleDate(article.publishedDate)}${method}${articleSelectionNote(article)}`;
       const summary = document.createElement("p");
       summary.className = "article-result-summary";
       const prefix = domestic ? "- " : "- (현지동향) ";
@@ -814,7 +825,7 @@
         const candidateMetadata = normalizeArticleMetadata(candidate);
         link.textContent = domestic ? formatDomesticArticleTitle(candidateMetadata.title) : candidateMetadata.title;
         const date = document.createElement("span");
-        date.textContent = `${candidateMetadata.publisher} · ${formatArticleDate(candidate.publishedDate)}`;
+        date.textContent = `${candidateMetadata.publisher} · ${formatArticleDate(candidate.publishedDate)}${articleSelectionNote(candidateMetadata, false)}`;
         row.append(link, date);
         candidateList.append(row);
         if (candidateList.children.length === 2) break;
@@ -949,7 +960,7 @@
       currentArticleDraft = null;
       if (typeof updateArticleHwpxApplyState === "function") updateArticleHwpxApplyState();
       articleKinds.forEach(kind => emptyArticleResult(kind, "해당 주간의 기사와 원문을 확인하고 있습니다."));
-      setArticleDraftStatus("지정 매체의 해당 주간 기사부터 확인하고, 없으면 검색으로 보완합니다. 완료된 초안부터 표시됩니다.");
+      setArticleDraftStatus("지정 매체와 공개 뉴스의 해당 주간 기사를 비교합니다. 완료된 초안부터 표시됩니다.");
       let terminal = false;
       try {
         const ownedRequest = { requestId: crypto.randomUUID().replaceAll("-", ""), reportDate: articleReportDate.value };

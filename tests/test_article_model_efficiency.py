@@ -10,19 +10,31 @@ class ArticleModelEfficiencyTests(unittest.TestCase):
         budget = s.ArticleModelBudget(max_seconds=45, seconds=8)
         self.assertEqual(budget.remaining_seconds(), 37)
         with patch.object(s, "monotonic", return_value=103):
-            budget.run_budget = s.ArticleRunModelBudget(max_seconds=180, started=100)
+            budget.run_budget = s.ArticleRunModelBudget(max_seconds=180, seconds=3)
             self.assertEqual(budget.remaining_seconds(), 37)
-        with patch.object(s, "monotonic", return_value=278):
+        # Even a very slow source fetch must not spend an unrelated section's
+        # inference allowance. Actual model work is charged separately.
+        with patch.object(s, "monotonic", return_value=10000):
+            self.assertEqual(budget.remaining_seconds(), 37)
+            budget.run_budget.seconds = 178
             self.assertEqual(budget.remaining_seconds(), 2)
 
     def test_global_expired_budget_never_starts_generation(self):
-        budget = s.ArticleModelBudget(run_budget=s.ArticleRunModelBudget(max_seconds=2, started=100))
+        budget = s.ArticleModelBudget(run_budget=s.ArticleRunModelBudget(max_seconds=2, seconds=2))
         with patch.object(s, "monotonic", return_value=103), s.article_model_budget(budget), \
                 patch.object(s, "_request_json") as request:
             with self.assertRaises(s.ArticleSummaryBudgetExceeded):
                 s._ollama_generate("원문 보고서 문구")
         request.assert_not_called()
         self.assertEqual(budget.calls, 0)
+
+    def test_only_actual_inference_is_charged_to_both_budgets(self):
+        budget = s.ArticleModelBudget(run_budget=s.ArticleRunModelBudget(seconds=12))
+        with s.article_model_budget(budget), patch.object(s, "monotonic", side_effect=[100, 104]), \
+                patch.object(s, "_request_json", return_value={"response": "brief"}):
+            s._ollama_generate("one request")
+        self.assertEqual(budget.seconds, 4)
+        self.assertEqual(budget.run_budget.seconds, 16)
 
     def test_remaining_allowance_limits_request_and_records_model_work(self):
         budget = s.ArticleModelBudget(max_seconds=45, seconds=35)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO, StringIO
 from functools import lru_cache
@@ -501,21 +502,17 @@ def fetch_usda_us_egg_data(target_dates: set[date]) -> dict[date, dict[str, floa
 
     inventory_reports = _find_usda_report_documents("1427")
     price_reports = _find_usda_report_documents("2848")
-    latest_inventory_report_date = max(
-        (report["reportDate"] for report in inventory_reports),
-        default=None,
-    )
-    latest_price_report_date = max(
-        (report["publishedDate"] for report in price_reports),
-        default=None,
-    )
+    inventory_by_date = _index_usda_reports(inventory_reports, "reportDate")
+    price_by_date = _index_usda_reports(price_reports, "publishedDate")
+    latest_inventory_report_date = max(inventory_by_date, default=None)
+    latest_price_report_date = max(price_by_date, default=None)
     results: dict[date, dict[str, float]] = {}
     failures: list[str] = []
 
     for week_ended in sorted(target_dates):
         inventory_date = week_ended - timedelta(days=4)
-        inventory_report = _select_usda_report(inventory_reports, "reportDate", inventory_date)
-        price_report = _select_usda_report(price_reports, "publishedDate", week_ended)
+        inventory_report = inventory_by_date.get(inventory_date)
+        price_report = price_by_date.get(week_ended)
         if inventory_report is None:
             if latest_inventory_report_date is not None and inventory_date > latest_inventory_report_date:
                 continue
@@ -556,13 +553,15 @@ def fetch_usda_us_chicken_data(target_dates: set[date]) -> dict[date, dict[str, 
 
     slaughter_reports = _find_usda_report_documents("3208")
     price_reports = _find_usda_report_documents("3646")
-    latest_slaughter_date = max((report["publishedDate"] for report in slaughter_reports), default=None)
-    latest_price_date = max((report["publishedDate"] for report in price_reports), default=None)
+    slaughter_by_date = _index_usda_reports(slaughter_reports, "publishedDate")
+    price_by_date = _index_usda_reports(price_reports, "publishedDate")
+    latest_slaughter_date = max(slaughter_by_date, default=None)
+    latest_price_date = max(price_by_date, default=None)
     results: dict[date, dict[str, float]] = {}
     failures: list[str] = []
     for week_ended in sorted(target_dates):
-        slaughter_report = _select_usda_report(slaughter_reports, "publishedDate", week_ended)
-        price_report = _select_usda_report(price_reports, "publishedDate", week_ended)
+        slaughter_report = slaughter_by_date.get(week_ended)
+        price_report = price_by_date.get(week_ended)
         if slaughter_report is None:
             if latest_slaughter_date is not None and week_ended > latest_slaughter_date:
                 continue
@@ -632,10 +631,11 @@ def _fetch_naver_exchange_rates(
             break
 
     if use_previous_business_day:
+        published_dates = sorted(available_rates)
         for target_date in exchange_dates - set(rates):
-            prior_dates = [item_date for item_date in available_rates if item_date <= target_date]
-            if prior_dates:
-                rates[target_date] = available_rates[max(prior_dates)]
+            previous_index = bisect_right(published_dates, target_date) - 1
+            if previous_index >= 0:
+                rates[target_date] = available_rates[published_dates[previous_index]]
 
     # 대체에 쓸 이전 값도 없는 날짜는 빈 결과로 남긴다. 미래 날짜의 값을
     # 가져오거나 0으로 채우지 않고, 호출 측에서 해당 행을 보류한다.
@@ -1186,6 +1186,27 @@ def _parse_usda_archive_date(value: str) -> date:
     if match is None:
         raise ValueError("USDA 발행일 형식을 읽지 못했습니다.")
     return datetime.strptime(match.group(0), "%m-%d-%Y").date()
+
+
+def _index_usda_reports(
+    reports: list[dict[str, object]],
+    date_field: str,
+) -> dict[date, dict[str, object]]:
+    """Build one request-local lookup, retaining the latest published correction.
+
+    Bulk weekly queries reuse this index rather than rescanning the archive for
+    each date. Strictly newer publication dates replace earlier entries; equal
+    dates retain the first entry, matching ``max`` in the single-date selector.
+    No result survives the current fetch, so a later corrected archive is read
+    afresh and missing/future dates still follow the existing caller policy.
+    """
+    indexed: dict[date, dict[str, object]] = {}
+    for report in reports:
+        report_date = report[date_field]
+        existing = indexed.get(report_date)
+        if existing is None or report["publishedDate"] > existing["publishedDate"]:
+            indexed[report_date] = report
+    return indexed
 
 
 def _select_usda_report(

@@ -104,7 +104,7 @@ class SourceTests(unittest.TestCase):
         with patch.object(drafts, "_preferred_site_article", side_effect=source.ArticleDigestError("upstream")), patch.object(drafts, "_search_article", return_value=article()):
             self.assertEqual(drafts._find_section(spec, START, END)["sourceMethod"], "search")
         with patch.object(source, "_download_soup", side_effect=source.ArticleDigestError("upstream")), patch.object(drafts, "_search_article", return_value=None):
-            with self.assertRaisesRegex(drafts.SourceUnavailable, "AviSite 원문 연결 실패"):
+            with self.assertRaisesRegex(drafts.SourceUnavailable, "AviSite 지정 경로에서 원문 미확보"):
                 drafts._find_section(spec, START, END)
 
     def test_japanese_news_pdf_uses_listing_title_and_date(self):
@@ -125,7 +125,9 @@ class SourceTests(unittest.TestCase):
 
     def test_domestic_uses_naver_before_google(self):
         spec = drafts.SPECS_BY_KEY["domestic_pork"]
-        with patch.object(source, "_search_naver_news", return_value=[article()]) as naver, patch.object(source, "_search_google_news_rss") as google, patch.object(drafts, "_choose_original", return_value=article()):
+        pork = article(title='미국 돼지고기 가격 상승',
+                       body='미국 돼지고기 공급 감소로 가격이 상승했다. ' * 6, sourceLanguage='ko')
+        with patch.object(source, "_search_naver_news", return_value=[pork]) as naver, patch.object(source, "_search_google_news_rss") as google, patch.object(drafts, "_choose_original", return_value=pork):
             self.assertIsNotNone(drafts._search_article(spec, START, END))
             self.assertEqual(naver.call_count, len(spec.queries + drafts.SEARCH_QUERIES[spec.key]))
             google.assert_not_called()
@@ -145,6 +147,25 @@ class SourceTests(unittest.TestCase):
 
 
 class CollectorTests(unittest.TestCase):
+    def test_repaired_domestic_brief_displays_its_own_source_evidence(self):
+        statement = '미국 농무부 등에 따르면 미국은 가뭄과 사료비 부담으로 소 사육 규모가 75년 만에 최소 수준으로 줄었다.'
+        unrelated = '원·달러 환율 하락은 수입 단가 부담을 줄이는 요인이다.'
+        body = unrelated + '\n' + statement + '\n' + '수입 쇠고기 시장의 공급과 가격 변화를 점검했다.' * 3
+        summary = '미국 농무부에 따르면 미국 소 사육 규모가 75년 만에 최소 수준으로 감소'
+        original = article(title='미국 소 사육 감소로 수입 쇠고기 가격 상승', body=body,
+                           briefBody=unrelated, sourceLanguage='ko')
+        with patch.object(drafts, '_usmef_pair', return_value={}), \
+             patch.object(drafts, '_find_section', side_effect=lambda spec, *_: original if spec.key == 'domestic' else None), \
+             patch.object(drafts, '_search_article', return_value=None), \
+             patch.object(source, '_native_report_sentence', return_value=None), \
+             patch.object(source, '_ollama_state', return_value={'available': True}), \
+             patch.object(source, '_summarize_report_sentence', return_value=summary):
+            result = drafts.collect_weekly_livestock_report_draft(END)
+        completed = result['sections']['domestic']
+        self.assertEqual(completed['status'], 'completed')
+        self.assertIn('75년', completed['article']['sourceExcerpt'])
+        self.assertNotIn('원·달러 환율', completed['article']['sourceExcerpt'])
+
     def test_all_sections_partial_results_and_failure_isolation(self):
         events = []
         def find(spec, start, end):
@@ -154,13 +175,13 @@ class CollectorTests(unittest.TestCase):
                 species = {'beef': '쇠고기', 'pork': '돼지고기', 'chicken': '닭고기', 'egg': '계란'}[spec.species]
                 return article(title=f'미국 {species} 공급 감소와 수요 동향 분석',
                                url=f'https://example.org/news/{spec.key}', sourceLanguage='ko',
-                               body=f'미국 {species} 시장의 공급과 수요 변화를 살펴봤다. ' * 6)
+                               body=f'미국 {species} 공급은 생산 감소로 부족해져 가격이 상승할 전망이다. ' * 6)
             return article()
         def summarize(kind, title, body):
             if kind == "us_egg":
                 raise source.ArticleDigestError("invalid summary")
             return "공급 감소로 가격 상승이 지속"
-        with patch.object(drafts, "_usmef_pair", return_value={"us": article(), "us_pork": article()}), patch.object(drafts, "_find_section", side_effect=find), patch.object(drafts, "_search_article", return_value=None), patch.object(source, "_ollama_state", return_value={"available": True}), patch.object(source, "_summarize_report_sentence", side_effect=summarize) as summary:
+        with patch.object(drafts, "_usmef_pair", return_value={"us": article(), "us_pork": article()}), patch.object(drafts, "_find_section", side_effect=find), patch.object(drafts, "_search_article", return_value=None), patch.object(source, "_ollama_state", return_value={"available": True}), patch.object(source, "_native_report_sentence", return_value=None), patch.object(source, "_summarize_report_sentence", side_effect=summarize) as summary:
             result = drafts.collect_weekly_livestock_report_draft(END, progress=lambda **event: events.append(event))
         self.assertEqual(result["totalCount"], 12)
         self.assertEqual(len(result["sections"]), 12)

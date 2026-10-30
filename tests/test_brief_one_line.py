@@ -15,7 +15,7 @@ class OneLineBriefTests(unittest.TestCase):
         s._summarize_report_sentence.cache_clear()
 
     def test_twelve_prompts_follow_role_targets_without_lowering_the_minimum(self):
-        self.assertEqual(STYLE_VERSION, "livestock-brief-v19")
+        self.assertEqual(STYLE_VERSION, "livestock-brief-v26")
         self.assertEqual(SUMMARY_MIN_LENGTH, 40)
         self.assertEqual(SUMMARY_TARGET_LENGTH, 50)
         for kind in SECTION_AUDIENCES:

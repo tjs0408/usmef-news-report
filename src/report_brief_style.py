@@ -2,12 +2,14 @@
 
 Reference: six supplied reports dated 2026-08-13 through 2026-09-17.
 The file named 20260904 has an internal report heading dated 9.10.
+The supplied 2026-10-22 report additionally informs issue selection and prose
+structure; its old figures and unverified article provenance are not evidence.
 These examples condition prompts; no model weights are trained or changed.
 """
 
 from functools import lru_cache
 
-STYLE_VERSION = "livestock-brief-v19"
+STYLE_VERSION = "livestock-brief-v26"
 MAX_ARTICLE_TRACKING = -20
 SUMMARY_MIN_LENGTH = 40
 # A one-line HWPX brief has considerably less room than the validation ceiling.

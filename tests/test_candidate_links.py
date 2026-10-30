@@ -21,7 +21,7 @@ class CandidateLinksTests(unittest.TestCase):
         with patch.object(d, '_search_article') as search:
             links = d._candidate_links(main, self.spec, self.start, self.end)
         self.assertEqual([x['url'] for x in links], ['https://example.com/one', 'https://example.com/two'])
-        self.assertEqual(set(links[0]), {'title', 'url', 'publisher', 'publishedDate'})
+        self.assertEqual(set(links[0]), {'title', 'url', 'publisher', 'publishedDate', 'selectionTier', 'selectionReason'})
         search.assert_not_called()
 
     def test_filter_duplicates_dates_and_unsafe_urls(self):

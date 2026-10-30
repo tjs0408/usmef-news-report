@@ -125,7 +125,7 @@ class ArticleSummaryFormatTests(unittest.TestCase):
              patch.object(s, "_repair_korean_report_sentence", return_value=correct) as repair:
             self.assertEqual(s._summarize_report_sentence("us_egg", "Egg prices", body),
                              s.compact_report_summary(correct, "us_egg", source=body, target=40))
-            self.assertEqual(repair.call_args.kwargs["facts"], [s._market_fact_excerpt(body)])
+            self.assertEqual(repair.call_args.kwargs["facts"], [s._market_fact_excerpt(body, kind='us_egg')])
             self.assertNotIn(wrong, repair.call_args.kwargs["facts"])
 
     def test_translated_facts_cannot_invent_an_outlook(self):

@@ -115,7 +115,7 @@ class DomesticSelectionTests(unittest.TestCase):
         # discovery afterwards and must choose its different verified source.
         shared = article('shared')
         pork_main = article('pork-failed', title='미국 돼지고기 수급과 가격 동향 분석',
-                            body='미국 돼지고기 공급과 수요의 주요 변화를 살펴봤다. ' * 5)
+                            body='미국 돼지고기 공급 감소와 수요 증가로 가격이 상승했다. ' * 5)
         beef_alternate = article('beef-distinct', title='중국 브라질산 쇠고기에 추가 관세', body=BEEF)
         failed, release_links, recovering_pork = Event(), Event(), Event()
         original_alternatives = d._verified_summary_alternatives
@@ -143,6 +143,8 @@ class DomesticSelectionTests(unittest.TestCase):
             return snapshot
 
         def native(kind, body):
+            if body == pork_main['body']:
+                return None  # exercise bounded inference, not extractive completion
             if kind == 'domestic_pork' and body == CPTPP and failed.is_set():
                 recovering_pork.set()
             return original_native(kind, body)

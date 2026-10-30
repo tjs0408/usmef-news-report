@@ -184,6 +184,8 @@ class ForeignSummaryRecoveryTests(unittest.TestCase):
         self.assertFalse(d._domestic_overseas_focus(article, d.SPECS_BY_KEY["domestic_pork"]))
         article.update(title="미국 9월 소비자물가 상승, 돼지고기 공급 부족", body="미국 돼지고기 가격은 공급 부족으로 4% 상승했다.")
         self.assertTrue(d._domestic_overseas_focus(article, d.SPECS_BY_KEY["domestic_pork"]))
+        article['title'] = "미국 돼지고기 공급 부족에 가격 상승"
+        self.assertTrue(d._domestic_overseas_focus(article, d.SPECS_BY_KEY["domestic_pork"]))
 
     def test_tariff_announcement_preserves_importer_exporter_and_quota_cause(self):
         body = ("중국이 남미의 친중 국가인 브라질의 소고기 수입품에 대해 1일부터 55%의 추가 관세를 부과한다고 상무부가 발표했다. "

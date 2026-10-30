@@ -39,14 +39,7 @@ from src.crawler import (
     fetch_usd_krw_exchange_rates,
 )
 from src.template_report import (
-    find_pending_brazil_chicken_rows,
-    find_pending_australia_beef_rows,
-    find_pending_eu_germany_rows,
-    find_pending_japan_egg_rows,
-    find_pending_report_dates,
-    find_pending_us_chicken_rows,
-    find_pending_us_egg_consumer_price_rows,
-    find_pending_us_egg_rows,
+    find_pending_rows,
     write_market_data_to_template,
 )
 from src.hwp_report import HwpReportError
@@ -59,7 +52,7 @@ from src.overseas_article_digest import (
 from src.livestock_article_draft import SECTION_GROUPS, SECTION_SPECS, collect_weekly_livestock_report_draft
 from src.article_cancellation import ArticleDraftCancelled
 from src.article_hwpx import ArticleHwpxError, apply_article_draft_to_hwpx
-from src.report_brief_style import SUMMARY_LIMITS, SUMMARY_MIN_LENGTH
+from src.report_brief_style import STYLE_VERSION, SUMMARY_LIMITS, SUMMARY_MIN_LENGTH
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -102,7 +95,25 @@ def index() -> str:
         active_sheet_count=10 if CEPEA_COLLECTION_ENABLED else 8,
         default_report_date=date.today().isoformat(),
         article_groups=SECTION_GROUPS,
+        article_style_version=STYLE_VERSION,
     )
+
+
+@app.get("/local-server-state")
+def local_server_state():
+    """Expose only local launcher readiness and busy flags, never job details."""
+    if request.remote_addr not in ("127.0.0.1", "::1"):
+        return "", 404
+    with ARTICLE_JOBS_LOCK:
+        article_busy = any(job.get("status") in ("running", "cancelling")
+                           for job in ARTICLE_JOBS.values())
+    with REPORT_JOBS_LOCK:
+        report_busy = any(job.get("status") == "running" for job in REPORT_JOBS.values())
+    response = jsonify(pid=os.getpid(), styleVersion=STYLE_VERSION,
+                       articleBusy=article_busy, reportBusy=report_busy,
+                       busy=article_busy or report_busy)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 def _validate_hwpx_article_draft(draft: object) -> dict:
@@ -414,7 +425,7 @@ def _save_article_job_diagnostics(job_id: str, job: dict[str, object]) -> None:
     result = job.get("result") or {}
     sections = job.get("sections") or {}
     diagnostic_keys = ("sourceSeconds", "summarySeconds", "modelCalls", "modelSeconds",
-                       "alternativeAttempts", "validationReasons", "promptTokens", "generatedTokens")
+                       "alternativeAttempts", "validationReasons", "promptTokens", "generatedTokens", "styleReferences")
     profile = {"jobId": job_id, "status": job.get("status"), "reportDate": job.get("reportDate"),
                "elapsedSeconds": job.get("elapsedSeconds"), "readyCount": job.get("readyCount", 0),
                "weekStart": result.get("weekStart"), "weekEnd": result.get("weekEnd"), "sections": {}}
@@ -423,6 +434,10 @@ def _save_article_job_diagnostics(job_id: str, job: dict[str, object]) -> None:
         diagnostics = section.get("diagnostics") or {}
         profile["sections"][key] = {
             "status": section.get("status"), "summaryError": section.get("summaryError"),
+            "summaryErrorCode": section.get("summaryErrorCode"),
+            "failureReasons": section.get("failureReasons", []),
+            "sourceDiagnostics": {name: value for name, value in section.get("sourceDiagnostics", {}).items()
+                                  if isinstance(value, int)},
             "errors": section.get("errors", []), "summary": section.get("summary"),
             "article": {name: article.get(name) for name in ("title", "publisher", "publishedDate", "url")},
             "diagnostics": {name: diagnostics[name] for name in diagnostic_keys if name in diagnostics},
@@ -504,14 +519,15 @@ def _run_report_job(job_id: str, template_path: Path) -> None:
     source_progress_finished: Event | None = None
     source_progress_publisher: Thread | None = None
     try:
-        market_pending_rows = find_pending_report_dates(template_path, date.today())
-        eu_germany_rows = find_pending_eu_germany_rows(template_path, date.today())
-        japan_egg_rows = find_pending_japan_egg_rows(template_path, date.today())
-        us_egg_rows = find_pending_us_egg_rows(template_path, date.today())
-        us_egg_consumer_price_rows = find_pending_us_egg_consumer_price_rows(template_path, date.today())
-        brazil_chicken_rows = find_pending_brazil_chicken_rows(template_path, date.today())
-        us_chicken_rows = find_pending_us_chicken_rows(template_path, date.today())
-        australia_beef_rows = find_pending_australia_beef_rows(template_path, date.today())
+        pending_rows = find_pending_rows(template_path, date.today())
+        market_pending_rows = pending_rows["market"]
+        eu_germany_rows = pending_rows["eu_germany"]
+        japan_egg_rows = pending_rows["japan_egg"]
+        us_egg_rows = pending_rows["us_egg"]
+        us_egg_consumer_price_rows = pending_rows["us_egg_consumer_price"]
+        brazil_chicken_rows = pending_rows["brazil_chicken"]
+        us_chicken_rows = pending_rows["us_chicken"]
+        australia_beef_rows = pending_rows["australia_beef"]
         has_pending_rows = any(
             (
                 market_pending_rows,

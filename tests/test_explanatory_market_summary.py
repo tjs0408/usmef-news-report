@@ -119,7 +119,8 @@ class ExplanatoryMarketSummaryTests(unittest.TestCase):
         for kind in ("us", "us_chicken"):
             self.assertIn("65~85자", s._brief_model_rules(kind))
         for kind in ("australia", "brazil_chicken", "us_pork", "eu_pork", "domestic_chicken", "domestic_egg"):
-            self.assertIn("40~45자", s._brief_model_rules(kind))
+            self.assertIn("45~60자", s._brief_model_rules(kind))
+            self.assertIn("반드시 최소 40자", s._brief_model_rules(kind))
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ work/*
 !work/export_excel_chart.ps1
 !work/excel_chart_helpers.ps1
 !work/profile_generation.py
+!work/verify_article_pipeline.py
 
 # Generated reports
 output/*
@@ -23,6 +24,7 @@ tmp/
 # Local environment files
 .env
 .env.*
+!.env.example
 
 # Editor settings
 .vscode/

@@ -17,6 +17,7 @@ for (const [selected, start, end] of [
 }
 sandbox.updateArticleSearchWindow();
 assert.match(sandbox.articleSearchWindowLabel.textContent, /2026\.09\.27~2026\.10\.03 \(일~토\)/);
+assert.match(sandbox.articleSearchWindowLabel.textContent, /지정 매체·공개 뉴스 비교/);
 sandbox.articleReportDate.value = "2026-10-04";
 sandbox.updateArticleSearchWindow();
 assert.match(sandbox.articleSearchWindowLabel.textContent, /2026\.10\.04~2026\.10\.10/);
@@ -24,6 +25,7 @@ sandbox.articleReportDate.value = "";
 sandbox.updateArticleSearchWindow();
 assert.equal(sandbox.articleSearchWindow(""), null);
 assert.match(sandbox.articleSearchWindowLabel.textContent, /일요일~토요일/);
+assert.match(sandbox.articleSearchWindowLabel.textContent, /지정 매체·공개 뉴스 비교/);
 
 const loader = html.match(/function loadArticleDraft\(\) \{([\s\S]*?)\n    \}\n\n    function saveArticleDraft/)[1];
 let rendered = 0;
@@ -40,5 +42,9 @@ assert.equal(rendered, 0, "old Friday-through-report-day draft is not reused");
 stored["2026-10-01"] = { weekStart: "2026-09-27", weekEnd: "2026-10-03" };
 load();
 assert.equal(rendered, 1, "saved draft from the matching week can be loaded");
-assert.match(html, /weekly-overseas-report-livestock-brief-v19-sunday-week-v1/);
+assert.match(html, /weekly-overseas-report-\{\{ article_style_version \}\}-sunday-week-v1/);
+assert.doesNotMatch(html, /weekly-overseas-report-livestock-brief-v25-sunday-week-v1/);
+assert.doesNotMatch(html, /weekly-overseas-report-livestock-brief-v23-sunday-week-v1/);
+assert.match(html, /\{\{ spec\.publisher \}\}·공개 뉴스 비교 · 해당 주간 원문을 한국어로 요약/);
+assert.match(html, /지정 매체와 공개 뉴스의 해당 주간 기사를 비교합니다/);
 console.log("Article window: Sunday/Saturday, boundaries, UI dates and stale drafts OK");

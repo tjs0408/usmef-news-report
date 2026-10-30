@@ -77,6 +77,7 @@ class DiscoveryReliabilityTests(unittest.TestCase):
         def public_search(query, language, start, end):
             return [original] if query.startswith("site:") else []
         with patch.object(s, "_search_google_news_rss", return_value=[wrapped]), \
+             patch.object(d, "_preferred_site_article", return_value=None), \
              patch.object(d, "_public_bing_candidates", return_value=[]), \
              patch.object(d, "_public_google_candidates", side_effect=public_search), \
              patch.object(d, "_choose_original", return_value=None) as choose:
@@ -113,21 +114,28 @@ class DiscoveryReliabilityTests(unittest.TestCase):
         section = result["sections"]["us_egg"]
         self.assertEqual(section["status"], "completed")
         self.assertTrue(section["article"]["url"].endswith("alternate"))
-        # Only the missing USMEF beef/pork searches are permitted here.
-        self.assertEqual([call.args[0].key for call in search.call_args_list], ["us", "us_pork"])
+        # The US egg source receives one initial comparison, but recovery
+        # must reuse the verified alternate instead of opening another crawl.
+        comparison = [call for call in search.call_args_list if call.kwargs.get('editorial')]
+        self.assertEqual([call.args[0].key for call in comparison], ['us_egg'])
+        self.assertEqual(comparison[0].args[1:3], (START, END))
+        self.assertEqual([call.args[0].key for call in search.call_args_list
+                          if not call.kwargs.get('editorial')], ["us", "us_pork"])
 
     def test_domestic_recovery_can_reuse_full_multi_species_original(self):
         spec = d.SPECS_BY_KEY['domestic_chicken']
         main = article('main', title='EU 가금육 수요 약화', body='유럽의 닭고기 수요와 가격이 달라졌다. ' * 8,
-                       alternatives=[article('related', title='유럽 닭고기 수요 변화', body='유럽 닭고기 수급과 가격 변동. ' * 10)])
+                       alternatives=[article('related', title='유럽 닭고기 수요 변화',
+                                             body='유럽 닭고기 공급은 생산량 감소로 줄어 가격이 상승했다. ' * 5)])
         shared = article('shared', title='CPTPP 관세만의 문제 아니다', sourceMethod='naver', body=(
             '정부는 CPTPP 가입 논의를 시작했다. 호주산 쇠고기, 멕시코산 쇠고기·돼지고기, '
             '캐나다산 돼지고기·닭고기, 뉴질랜드산 전지분유 등의 수입 증가가 국내 생산 감소로 이어질 수 있다는 전망이다.'))
         found = d._verified_summary_alternatives(main, spec, START, END, [shared, shared])
-        self.assertEqual(found[0]['url'], shared['url'])
-        self.assertEqual(found[0]['sourceMethod'], 'naver')
+        self.assertEqual(found[0]['url'], main['alternatives'][0]['url'])
+        shared_candidate = next(item for item in found if item['url'] == shared['url'])
+        self.assertEqual(shared_candidate['sourceMethod'], 'naver')
         self.assertEqual(len(found), 2)
-        self.assertIn('CPTPP 가입 시', s._native_report_sentence(spec.key, found[0]['body']))
+        self.assertIn('CPTPP 가입 시', s._native_report_sentence(spec.key, shared_candidate['body']))
 
     def test_shared_recovery_keeps_week_species_and_domestic_boundaries(self):
         main = article('main')

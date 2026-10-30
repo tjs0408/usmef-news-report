@@ -78,8 +78,8 @@ class EggImportCostTests(unittest.TestCase):
 
 
 class EggCandidateRecoveryTests(unittest.TestCase):
-    def _collect_with_late_candidate(self, candidate):
-        main = article("main", body="브라질 계란 수급과 가격을 둘러싼 논의를 확인했다. " * 5,
+    def _collect_with_late_candidate(self, candidate, *, expect_native_search=False):
+        main = article("main", body="브라질 계란 공급 감소에 따라 가격이 상승했다. " * 5,
                        briefBody="브라질 계란 수급에 대한 논의")
         failed, release_enrichment = Event(), Event()
         original_alternatives = d._verified_summary_alternatives
@@ -121,8 +121,22 @@ class EggCandidateRecoveryTests(unittest.TestCase):
             result = d.collect_weekly_livestock_report_draft(DAY)
         self.assertEqual(request.call_count, 2)
         self.assertEqual(summarize.call_count, 1)
-        self.assertFalse(any(call.args[0].key == "domestic_egg" for call in search.call_args_list))
-        return result["sections"]["domestic_egg"]
+        section = result["sections"]["domestic_egg"]
+        recovery_searches = [call for call in search.call_args_list
+                             if call.args[0].key == "domestic_egg"]
+        if expect_native_search:
+            # An invalid late original cannot be used. Independent native-only
+            # discovery is allowed once, without granting another model call.
+            self.assertEqual(len(recovery_searches), 1)
+            self.assertTrue(recovery_searches[0].kwargs["native_only"])
+            self.assertEqual(recovery_searches[0].args[1:3],
+                             (date(2026, 10, 11), date(2026, 10, 17)))
+            self.assertIn(main["url"], recovery_searches[0].kwargs["exclude_urls"])
+            self.assertEqual(section["sourceDiagnostics"]["nativeRecoverySearches"], 1)
+            self.assertEqual(section["sourceDiagnostics"]["nativeRecoveryReady"], 0)
+        else:
+            self.assertEqual(recovery_searches, [], "reuse the existing ready original before discovery")
+        return section
 
     def test_exhausted_model_reuses_existing_candidate_future_without_more_calls(self):
         ready = article("late-ready")
@@ -143,7 +157,8 @@ class EggCandidateRecoveryTests(unittest.TestCase):
             {"body": "브라질 닭고기 가격과 공급 관련 원문을 확인했다. " * 5},
         ):
             with self.subTest(changes=changes):
-                section = self._collect_with_late_candidate(article("invalid", **changes))
+                section = self._collect_with_late_candidate(article("invalid", **changes),
+                                                            expect_native_search=True)
                 self.assertEqual(section["status"], "summary_error")
                 self.assertEqual(section["diagnostics"]["modelCalls"], 2)
                 self.assertEqual(section["diagnostics"]["alternativeAttempts"], 0)
